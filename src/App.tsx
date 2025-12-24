@@ -1,0 +1,1465 @@
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+
+// --- Types & Interfaces ---
+
+type Team = 'left' | 'right';
+type EntityType = 'knight' | 'giant' | 'archer' | 'skeleton' | 'dragon' | 'cannon' | 'wizard' | 'mini_pekka' | 'bats' | 'tower';
+type CardType = 'knight' | 'giant' | 'archer' | 'skeleton_army' | 'dragon' | 'cannon' | 'wizard' | 'mini_pekka' | 'bats' | 'fireball' | 'log' | 'freeze';
+type GameView = 'menu' | 'game' | 'credits';
+type Difficulty = 'easy' | 'medium' | 'hard';
+
+// --- Audio System ---
+// Fix: Reusing AudioContext to prevent "limit reached" errors
+const getAudioContext = () => {
+    const win = window as any;
+    if (!win.gameAudioContext) {
+        const AudioContext = win.AudioContext || win.webkitAudioContext;
+        if (AudioContext) {
+            win.gameAudioContext = new AudioContext();
+        }
+    }
+    return win.gameAudioContext;
+};
+
+const playSound = (type: 'spawn' | 'attack' | 'explosion' | 'win' | 'lose' | 'log' | 'arrow' | 'freeze' | 'magic' | 'time' | 'squeak' | 'cannon') => {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    
+    // Resume context if suspended (browser autoplay policy)
+    if (ctx.state === 'suspended') ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    
+    switch (type) {
+      case 'spawn':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+        break;
+      case 'attack': 
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(100, now);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+        break;
+      case 'arrow':
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(600, now);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+        break;
+      case 'cannon':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+        break;
+      case 'magic':
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.linearRampToValueAtTime(400, now + 0.2);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+        break;
+      case 'squeak': 
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(900, now);
+        osc.frequency.linearRampToValueAtTime(1200, now + 0.1);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+        break;
+      case 'explosion': 
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(100, now);
+        osc.frequency.exponentialRampToValueAtTime(10, now + 0.3);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+        break;
+      case 'freeze': 
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(800, now + 0.5);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        break;
+      case 'log': 
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(80, now);
+        osc.frequency.linearRampToValueAtTime(60, now + 0.5);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        break;
+      case 'time':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.setValueAtTime(0, now + 0.1);
+        osc.frequency.setValueAtTime(800, now + 0.2);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.4);
+        osc.start(now);
+        osc.stop(now + 0.4);
+        break;
+      case 'win':
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.setValueAtTime(600, now + 0.1);
+        osc.frequency.setValueAtTime(800, now + 0.2);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        break;
+      case 'lose':
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(100, now + 0.5);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.5);
+        break;
+    }
+  } catch (e) {
+    // console.error('Audio not supported');
+  }
+};
+
+interface CardStats {
+  id: CardType;
+  name: string;
+  cost: number;
+  icon: string;
+  description: string;
+  cooldown: number; // ms
+}
+
+const CARDS: Record<CardType, CardStats> = {
+  knight: { id: 'knight', name: 'Knight', cost: 3, icon: '⚔️', description: 'Melee mini-tank. Good stats for cost.', cooldown: 3000 },
+  giant: { id: 'giant', name: 'Giant', cost: 5, icon: '💪', description: 'Ignores troops. Attacks buildings only.', cooldown: 5000 },
+  archer: { id: 'archer', name: 'Archer', cost: 3, icon: '🏹', description: 'Ranged attackers. Good vs air.', cooldown: 3000 },
+  skeleton_army: { id: 'skeleton_army', name: 'Skel Army', cost: 3, icon: '💀', description: 'Swarm of skeletons. Weak to splash.', cooldown: 6000 },
+  bats: { id: 'bats', name: 'Bats', cost: 2, icon: '🦇', description: 'Fast flying swarm. Cheap cycle.', cooldown: 3000 },
+  dragon: { id: 'dragon', name: 'Inf Dragon', cost: 4, icon: '🐲', description: 'Flying. Damage ramps up over time.', cooldown: 7000 },
+  wizard: { id: 'wizard', name: 'Wizard', cost: 5, icon: '🧙‍♂️', description: 'Deals area damage (Splash).', cooldown: 5000 },
+  mini_pekka: { id: 'mini_pekka', name: 'Mini P.E.K.K.A', cost: 4, icon: '🤖', description: 'High single target damage. Glass cannon.', cooldown: 4000 },
+  cannon: { id: 'cannon', name: 'Cannon', cost: 3, icon: '💣', description: 'Defensive building. Distracts giants.', cooldown: 8000 },
+  fireball: { id: 'fireball', name: 'Fireball', cost: 4, icon: '🔥', description: 'Spell. Deals area damage anywhere.', cooldown: 6000 },
+  freeze: { id: 'freeze', name: 'Freeze', cost: 4, icon: '❄️', description: 'Spell. Freezes enemies for 4 seconds.', cooldown: 8000 },
+  log: { id: 'log', name: 'The Log', cost: 2, icon: '🪵', description: 'Spell. Rolls and pushes back ground troops.', cooldown: 4000 },
+};
+
+interface BaseEntity {
+  id: string;
+  team: Team;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  hp: number;
+  maxHp: number;
+  damage: number;
+  range: number;
+  sightRange: number;
+  attackCooldown: number;
+  lastAttackTime: number;
+  color: string;
+  type: EntityType;
+  isFlying?: boolean;
+  isBuilding?: boolean;
+  targetId?: string | null;
+  rampUpValue?: number;
+  frozenUntil?: number; // Timestamp
+}
+
+interface Unit extends BaseEntity {
+  speed: number;
+  state: 'moving' | 'attacking' | 'idle';
+}
+
+interface Tower extends BaseEntity {
+  // Towers don't move
+}
+
+interface Projectile {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  speed: number;
+  color: string;
+  damage?: number;
+  area?: boolean; 
+  areaRadius?: number; 
+  isLog?: boolean; 
+  isArrow?: boolean; 
+  isMagic?: boolean; 
+  isCannonball?: boolean; 
+  ownerTeam?: Team;
+  hitIds?: string[];
+  life?: number;
+  targetId?: string;
+}
+
+// --- Game Constants ---
+
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 400; 
+const LANE_Y = 300; 
+const FLYING_Y = 200; 
+const TOWER_HP = 3000; 
+const MATCH_DURATION = 120; // 2 minutes
+const DOUBLE_ELIXIR_TIME = 40; // Double elixir at 40s left
+
+// --- Helper Functions ---
+
+const generateId = () => Math.random().toString(36).substr(2, 9);
+
+const shuffleDeck = (deck: CardType[]) => {
+    const d = [...deck];
+    for (let i = d.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [d[i], d[j]] = [d[j], d[i]];
+    }
+    return d;
+};
+
+const createUnit = (team: Team, type: EntityType, xPos?: number): Unit[] => {
+  const isLeft = team === 'left';
+  const baseX = xPos !== undefined ? xPos : (isLeft ? 100 : CANVAS_WIDTH - 100);
+  const teamColor = isLeft ? '#3b82f6' : '#ef4444'; 
+  
+  // Defaults
+  let stats: Partial<Unit> = {
+    width: 30, height: 30, hp: 100, maxHp: 100, damage: 10, range: 30, sightRange: 200, speed: 40, 
+    attackCooldown: 1000, color: teamColor, isFlying: false, type: type
+  };
+
+  switch(type) {
+    case 'knight':
+      stats = { ...stats, width: 30, height: 40, hp: 750, maxHp: 750, damage: 80, speed: 50, range: 40, sightRange: 200, attackCooldown: 1200 };
+      break;
+    case 'giant':
+      stats = { ...stats, width: 50, height: 70, hp: 2200, maxHp: 2200, damage: 140, speed: 30, range: 40, sightRange: 600, attackCooldown: 1500 };
+      break;
+    case 'archer':
+      stats = { ...stats, width: 25, height: 35, hp: 200, maxHp: 200, damage: 45, range: 170, sightRange: 220, speed: 50, attackCooldown: 1000 };
+      break;
+    case 'skeleton':
+      stats = { ...stats, width: 15, height: 20, hp: 50, maxHp: 50, damage: 40, range: 20, sightRange: 200, speed: 65, attackCooldown: 800 };
+      break;
+    case 'bats':
+      stats = { ...stats, width: 20, height: 15, hp: 40, maxHp: 40, damage: 40, range: 20, sightRange: 200, speed: 85, isFlying: true, attackCooldown: 600, color: isLeft ? '#818cf8' : '#7f1d1d' }; 
+      break;
+    case 'dragon':
+      stats = { ...stats, width: 40, height: 30, hp: 400, maxHp: 400, damage: 5, range: 110, sightRange: 200, speed: 45, isFlying: true, attackCooldown: 400 };
+      break;
+    case 'wizard':
+      stats = { ...stats, width: 30, height: 40, hp: 350, maxHp: 350, damage: 130, range: 165, sightRange: 220, speed: 50, attackCooldown: 1400, color: isLeft ? '#6366f1' : '#b91c1c' };
+      break;
+    case 'mini_pekka':
+      stats = { ...stats, width: 35, height: 35, hp: 650, maxHp: 650, damage: 350, range: 30, sightRange: 200, speed: 60, attackCooldown: 1600, color: isLeft ? '#0ea5e9' : '#dc2626' };
+      break;
+    case 'cannon':
+      stats = { ...stats, width: 40, height: 40, hp: 700, maxHp: 700, damage: 70, range: 200, sightRange: 200, speed: 0, isBuilding: true, color: isLeft ? '#1e3a8a' : '#7f1d1d', attackCooldown: 900 };
+      break;
+  }
+
+  const createSingle = (offsetX = 0, offsetY = 0): Unit => ({
+    id: generateId(),
+    team,
+    type,
+    x: baseX + offsetX,
+    y: (stats.isFlying ? FLYING_Y : (stats.isBuilding ? LANE_Y - 10 : LANE_Y)) + offsetY,
+    width: stats.width!,
+    height: stats.height!,
+    hp: stats.hp!,
+    maxHp: stats.maxHp!,
+    damage: stats.damage!,
+    range: stats.range!,
+    sightRange: stats.sightRange!,
+    speed: stats.speed!,
+    attackCooldown: stats.attackCooldown!,
+    lastAttackTime: 0,
+    color: stats.color!,
+    state: 'moving',
+    isFlying: stats.isFlying,
+    isBuilding: stats.isBuilding,
+    rampUpValue: 0,
+    targetId: null,
+    frozenUntil: 0
+  });
+
+  if (type === 'skeleton') {
+    return Array.from({ length: 7 }).map((_, i) => createSingle(i * -15)); 
+  }
+  if (type === 'bats') {
+    return Array.from({ length: 5 }).map((_, i) => createSingle(i * -12, (i % 2 === 0 ? -10 : 10))); 
+  }
+
+  return [createSingle()];
+};
+
+const createTower = (team: Team): Tower => {
+  const isLeft = team === 'left';
+  return {
+    id: `tower-${team}`,
+    team,
+    type: 'tower',
+    x: isLeft ? 30 : CANVAS_WIDTH - 80,
+    y: LANE_Y - 60,
+    width: 50,
+    height: 100,
+    hp: TOWER_HP,
+    maxHp: TOWER_HP,
+    damage: 60, 
+    range: 300, 
+    sightRange: 300,
+    attackCooldown: 800,
+    lastAttackTime: 0,
+    color: isLeft ? '#2563eb' : '#dc2626',
+    targetId: null,
+    frozenUntil: 0
+  };
+};
+
+// --- Main Component ---
+
+export default function App() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const requestRef = useRef<number>();
+  const lastTimeRef = useRef<number>(0);
+  
+  const unitsRef = useRef<Unit[]>([]);
+  const towersRef = useRef<Tower[]>([]);
+  const projectilesRef = useRef<Projectile[]>([]);
+  const particlesRef = useRef<{x: number, y: number, life: number, color: string, vx: number, vy: number}[]>([]);
+  const starsRef = useRef<{x: number, y: number, alpha: number}[]>([]); 
+  const cratersRef = useRef<{x: number, y: number, width: number, height: number}[]>([]);
+
+  const [view, setView] = useState<GameView>('menu');
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  const [winner, setWinner] = useState<Team | null>(null);
+  const [elixir, setElixir] = useState(0);
+  const [timeRemaining, setTimeRemaining] = useState(MATCH_DURATION);
+  const [doubleElixir, setDoubleElixir] = useState(false);
+  const [isTiebreaker, setIsTiebreaker] = useState(false);
+  
+  // PLAYER DECK STATE
+  const [hand, setHand] = useState<CardType[]>([]);
+  const [nextCard, setNextCard] = useState<CardType>('wizard');
+  const [drawPile, setDrawPile] = useState<CardType[]>([]);
+  const [cardCooldowns, setCardCooldowns] = useState<Record<string, number>>({});
+  
+  // AI DECK STATE
+  const aiStateRef = useRef({
+      hand: [] as CardType[],
+      nextCard: 'knight' as CardType,
+      drawPile: [] as CardType[],
+      elixir: 0,
+      timer: 0
+  });
+
+  const [draggingCard, setDraggingCard] = useState<CardType | null>(null);
+  const [dragPos, setDragPos] = useState({ x: 0, y: 0 });
+  const gameStartRef = useRef<number>(0);
+
+  // --- Logic ---
+
+  const initGame = useCallback(() => {
+    unitsRef.current = [];
+    towersRef.current = [createTower('left'), createTower('right')];
+    projectilesRef.current = [];
+    particlesRef.current = [];
+    
+    // Scenery Generation
+    starsRef.current = Array.from({length: 50}).map(() => ({
+        x: Math.random() * CANVAS_WIDTH,
+        y: Math.random() * (LANE_Y - 50),
+        alpha: Math.random() * 0.8 + 0.2
+    }));
+    
+    // Generate Craters
+    cratersRef.current = Array.from({length: 8}).map(() => ({
+        x: Math.random() * CANVAS_WIDTH,
+        y: LANE_Y + Math.random() * 80,
+        width: 30 + Math.random() * 30,
+        height: 10 + Math.random() * 10
+    }));
+
+    setWinner(null);
+    setElixir(0); 
+    
+    aiStateRef.current.elixir = 0; 
+    aiStateRef.current.timer = 0;
+    
+    lastTimeRef.current = performance.now();
+    gameStartRef.current = performance.now();
+    setTimeRemaining(MATCH_DURATION);
+    setDoubleElixir(false);
+    setIsTiebreaker(false);
+    
+    const fullDeck: CardType[] = ['knight', 'archer', 'giant', 'skeleton_army', 'dragon', 'cannon', 'wizard', 'mini_pekka', 'bats', 'fireball', 'log', 'freeze'];
+    const pDeck = shuffleDeck([...fullDeck]); 
+    setHand(pDeck.slice(0, 4));
+    setNextCard(pDeck[4]);
+    setDrawPile(pDeck.slice(5));
+    
+    const aiDeck = shuffleDeck([...fullDeck]);
+    aiStateRef.current.hand = aiDeck.slice(0, 4);
+    aiStateRef.current.nextCard = aiDeck[4];
+    aiStateRef.current.drawPile = aiDeck.slice(5);
+
+    setCardCooldowns({});
+  }, []);
+
+  const spawnCard = (card: CardType, team: Team, xPos: number) => {
+    // SPELLS
+    if (card === 'fireball') {
+      playSound('spawn');
+      // FIX: Ensure y starts at -200 (Sky) to clearly come from "upper"
+      projectilesRef.current.push({
+        x: xPos, y: -200, tx: xPos, ty: LANE_Y, speed: 300, color: '#f97316', damage: 325, area: true, areaRadius: 80, ownerTeam: team
+      });
+      return;
+    }
+
+    if (card === 'freeze') {
+        playSound('freeze');
+        const radius = 120;
+        const duration = 4000; 
+        const now = performance.now();
+        [...unitsRef.current, ...towersRef.current].forEach(e => {
+            if (e.team !== team && Math.abs(e.x - xPos) < radius) {
+                e.frozenUntil = now + duration;
+                e.rampUpValue = 0;
+            }
+        });
+        for(let i=0; i<30; i++) {
+             particlesRef.current.push({
+                x: xPos + (Math.random()*radius*2 - radius),
+                y: LANE_Y + (Math.random()*40 - 20),
+                life: 2.0, color: '#67e8f9',
+                vx: 0, vy: -0.5
+            });
+        }
+        return;
+    }
+
+    if (card === 'log') {
+        playSound('log');
+        // Log always rolls away from the base.
+        // Left team (Player) -> rolls Right (+1)
+        // Right team (AI) -> rolls Left (-1)
+        const direction = team === 'left' ? 1 : -1;
+        projectilesRef.current.push({
+            x: xPos, y: LANE_Y + 10, tx: 0, ty: 0, 
+            speed: 160 * direction, // Slower log
+            color: '#854d0e',
+            damage: 80, // Lower damage
+            isLog: true, 
+            ownerTeam: team,
+            hitIds: [],
+            life: 350
+        });
+        // Particle pop at spawn
+        for(let i=0; i<5; i++) {
+            particlesRef.current.push({
+                x: xPos, y: LANE_Y + 10, life: 0.5, color: '#a16207',
+                vx: Math.random()*4-2, vy: Math.random()*(-4)
+            });
+        }
+        return;
+    }
+
+    // UNITS
+    if (card === 'bats') playSound('squeak');
+    else playSound('spawn');
+
+    let type: EntityType = 'knight';
+    if (card === 'skeleton_army') type = 'skeleton';
+    else if (card === 'giant') type = 'giant';
+    else if (card === 'archer') type = 'archer';
+    else if (card === 'dragon') type = 'dragon';
+    else if (card === 'cannon') type = 'cannon';
+    else if (card === 'wizard') type = 'wizard';
+    else if (card === 'mini_pekka') type = 'mini_pekka';
+    else if (card === 'bats') type = 'bats';
+
+    const newUnits = createUnit(team, type, xPos);
+    unitsRef.current.push(...newUnits);
+  };
+
+  const handleCardUse = (card: CardType, x: number) => {
+     if (winner || isTiebreaker) return;
+
+     const stats = CARDS[card];
+     if (elixir < stats.cost) return;
+
+     const isSpell = card === 'fireball' || card === 'log' || card === 'freeze';
+     if (!isSpell && x > CANVAS_WIDTH / 2) return; 
+
+     spawnCard(card, 'left', x);
+     setElixir(prev => prev - stats.cost);
+
+     const usedCard = card;
+     const newCard = nextCard;
+     const newNext = drawPile[0];
+     const newDrawPile = [...drawPile.slice(1), usedCard];
+
+     setHand(prev => {
+         const idx = prev.indexOf(usedCard);
+         const h = [...prev];
+         h[idx] = newCard;
+         return h;
+     });
+     setNextCard(newNext);
+     setDrawPile(newDrawPile);
+
+     setCardCooldowns(prev => ({...prev, [card]: Date.now() + stats.cooldown}));
+     setTimeout(() => {
+        setCardCooldowns(prev => {
+            const n = {...prev};
+            delete n[card];
+            return n;
+        });
+     }, stats.cooldown);
+  };
+
+  const handleNextLevel = () => {
+    if (difficulty === 'easy') setDifficulty('medium');
+    else if (difficulty === 'medium') setDifficulty('hard');
+    initGame();
+  };
+
+  const update = (dt: number) => {
+    if (winner || view !== 'game') return;
+
+    const elapsed = (performance.now() - gameStartRef.current) / 1000;
+    const remaining = Math.max(0, MATCH_DURATION - elapsed);
+    setTimeRemaining(remaining);
+    
+    const isDouble = remaining <= DOUBLE_ELIXIR_TIME;
+    if (isDouble && !doubleElixir) {
+        setDoubleElixir(true);
+        playSound('time');
+    }
+
+    if (remaining <= 0) {
+        if (!isTiebreaker) setIsTiebreaker(true);
+        
+        towersRef.current[0].hp -= dt * 0.3;
+        towersRef.current[1].hp -= dt * 0.3;
+
+        const leftHP = towersRef.current[0].hp;
+        const rightHP = towersRef.current[1].hp;
+
+        if (leftHP <= 0 && rightHP <= 0) {
+            setWinner(leftHP > rightHP ? 'left' : 'right');
+        } else if (leftHP <= 0) {
+            setWinner('right'); playSound('lose');
+        } else if (rightHP <= 0) {
+            setWinner('left'); playSound('win');
+        }
+        return; 
+    }
+
+    if (!isTiebreaker) {
+        const rate = isDouble ? 1.0 : 2.0; 
+        if (elixir < 10) setElixir(e => Math.min(e + (dt / (rate * 1000)), 10)); 
+        
+        if (aiStateRef.current.elixir < 10) {
+            aiStateRef.current.elixir += (dt / (rate * 1000));
+        }
+    }
+
+    aiStateRef.current.timer += dt;
+    let aiInterval = 2000; 
+    if (difficulty === 'easy') aiInterval = 4000; 
+    if (difficulty === 'hard') aiInterval = 1000; 
+    
+    if (aiStateRef.current.timer > aiInterval && !isTiebreaker) { 
+        const playerUnits = unitsRef.current.filter(u => u.team === 'left');
+        let threatLevel = 0;
+        let hasSwarm = false;
+        let hasTank = false;
+        let hasAir = false;
+        let bridgeX = CANVAS_WIDTH / 2;
+
+        playerUnits.forEach(u => {
+            if (u.x > bridgeX - 100) {
+                threatLevel += u.cost || 3; 
+                if (u.type === 'skeleton' || u.type === 'bats') hasSwarm = true;
+                if (u.type === 'giant') hasTank = true;
+                if (u.type === 'dragon') hasAir = true;
+            }
+        });
+
+        const aiHand = aiStateRef.current.hand;
+        let bestCard: CardType | null = null;
+        const currentElixir = aiStateRef.current.elixir;
+        const affordable = aiHand.filter(c => CARDS[c].cost <= currentElixir);
+
+        if (affordable.length > 0) {
+            if (difficulty === 'easy') {
+                if (currentElixir > 6 || (threatLevel > 0 && currentElixir > 4)) {
+                    bestCard = affordable[Math.floor(Math.random() * affordable.length)];
+                }
+            } else if (threatLevel > 0) {
+                const counters = affordable.filter(c => {
+                    if (hasSwarm) return ['log', 'fireball', 'wizard', 'archer', 'dragon', 'bats'].includes(c);
+                    if (hasTank) return ['mini_pekka', 'skeleton_army', 'dragon', 'cannon', 'bats'].includes(c);
+                    if (hasAir) return ['wizard', 'archer', 'dragon', 'fireball', 'bats'].includes(c);
+                    return false;
+                });
+                if (counters.length > 0) bestCard = counters[Math.floor(Math.random() * counters.length)];
+                else bestCard = affordable.sort((a,b) => CARDS[a].cost - CARDS[b].cost)[0];
+            } else {
+                if (currentElixir > 8) {
+                    const heavy = affordable.filter(c => CARDS[c].cost >= 4);
+                    if (heavy.length > 0) bestCard = heavy[Math.floor(Math.random() * heavy.length)];
+                    else bestCard = affordable[0];
+                }
+            }
+        }
+
+        if (bestCard) {
+            let spawnX = CANVAS_WIDTH - 100;
+            const cost = CARDS[bestCard].cost;
+
+            if (bestCard === 'fireball' || bestCard === 'freeze' ) {
+                if (playerUnits.length > 0 && difficulty !== 'easy') {
+                    const target = playerUnits[0]; 
+                    spawnX = target.x;
+                } else {
+                    spawnX = 100; 
+                }
+            } else if (bestCard === 'log') {
+                if (playerUnits.length > 0 && difficulty !== 'easy') {
+                    const target = playerUnits[0];
+                    spawnX = Math.min(CANVAS_WIDTH, target.x + 150); 
+                } else {
+                    spawnX = CANVAS_WIDTH - 50; 
+                }
+            } else {
+                if (difficulty === 'hard') {
+                    const enemiesOnMySide = playerUnits.filter(u => u.x > CANVAS_WIDTH / 2);
+                    
+                    if (enemiesOnMySide.length > 0) {
+                        const threat = enemiesOnMySide.sort((a,b) => b.x - a.x)[0];
+                        if (bestCard === 'cannon') {
+                            spawnX = Math.min(CANVAS_WIDTH - 150, threat.x + 200);
+                        } else if (bestCard === 'archer' || bestCard === 'wizard' || bestCard === 'dragon') {
+                            spawnX = CANVAS_WIDTH - 50;
+                        } else if (bestCard === 'skeleton_army' || bestCard === 'mini_pekka' || bestCard === 'bats') {
+                             spawnX = threat.x + 20;
+                        } else {
+                             spawnX = threat.x + 60;
+                        }
+                    } else {
+                        spawnX = CANVAS_WIDTH / 2 + 40;
+                    }
+                } else if (difficulty === 'medium') {
+                    if (bestCard === 'cannon' || bestCard === 'giant') {
+                        spawnX = CANVAS_WIDTH - 150; 
+                    } else if (bestCard === 'mini_pekka' || bestCard === 'skeleton_army') {
+                        spawnX = CANVAS_WIDTH/2 + 20; 
+                    } else {
+                        spawnX = CANVAS_WIDTH - 100; 
+                    }
+                } else {
+                    spawnX = CANVAS_WIDTH/2 + 50 + Math.random() * 200;
+                }
+            }
+
+            spawnCard(bestCard, 'right', spawnX);
+            aiStateRef.current.elixir -= cost;
+
+            const usedIdx = aiStateRef.current.hand.indexOf(bestCard);
+            const newCard = aiStateRef.current.nextCard;
+            const newNext = aiStateRef.current.drawPile[0];
+            
+            aiStateRef.current.hand[usedIdx] = newCard;
+            aiStateRef.current.nextCard = newNext;
+            aiStateRef.current.drawPile = [...aiStateRef.current.drawPile.slice(1), bestCard];
+        }
+        aiStateRef.current.timer = 0;
+    }
+
+    // 3. Units Update
+    unitsRef.current.forEach(unit => {
+      if (unit.frozenUntil && unit.frozenUntil > performance.now()) return;
+
+      if (unit.isBuilding && unit.type === 'cannon') {
+         unit.hp -= dt * 0.07; 
+      }
+
+      // CLAMP POSITIONS (Prevent walking off-screen)
+      unit.x = Math.max(0, Math.min(CANVAS_WIDTH, unit.x));
+
+      let target: BaseEntity | null = null;
+      const allEnemies = [...unitsRef.current.filter(u => u.team !== unit.team), ...towersRef.current.filter(t => t.team !== unit.team)];
+
+      // Giant Retargeting Logic
+      if (unit.type === 'giant') {
+          let closestBuilding: BaseEntity | null = null;
+          let minBuildingDist = Infinity;
+          
+          allEnemies.forEach(enemy => {
+              if (enemy.hp <= 0) return;
+              if (enemy.isBuilding || enemy.type === 'tower') {
+                  const dist = Math.abs(unit.x - enemy.x);
+                  if (dist < minBuildingDist) {
+                      minBuildingDist = dist;
+                      closestBuilding = enemy;
+                  }
+              }
+          });
+
+          if (closestBuilding && closestBuilding.id !== unit.targetId) {
+              unit.targetId = closestBuilding.id;
+              unit.state = 'moving'; 
+          }
+      }
+
+      if (unit.targetId) {
+          const lockedTarget = allEnemies.find(e => e.id === unit.targetId);
+          if (lockedTarget && lockedTarget.hp > 0) {
+              if (unit.state === 'attacking') {
+                  if (Math.abs(unit.x - lockedTarget.x) <= unit.range) {
+                      target = lockedTarget;
+                  } else {
+                      unit.targetId = null; 
+                      unit.rampUpValue = 0; 
+                  }
+              } else {
+                  const isLockedOnBuilding = lockedTarget.type === 'tower' || lockedTarget.isBuilding;
+                  const isBuildingTargeter = unit.type === 'giant';
+                  if (isLockedOnBuilding && !isBuildingTargeter) target = null; 
+                  else target = lockedTarget; 
+              }
+          } else {
+              unit.targetId = null;
+              unit.rampUpValue = 0;
+          }
+      }
+
+      if (!target) {
+         let closestEnemy: BaseEntity | null = null;
+         let minEnemyDist = Infinity;
+         
+         allEnemies.forEach(enemy => {
+             if (enemy.hp <= 0) return;
+             if (enemy.isFlying && !unit.isFlying && unit.range < 100 && unit.type !== 'archer' && unit.type !== 'wizard') return; 
+             if (unit.type === 'giant' && !enemy.isBuilding && enemy.type !== 'tower') return;
+
+             const dist = Math.abs(unit.x - enemy.x);
+             if (dist <= unit.sightRange) {
+                 if (dist < minEnemyDist) {
+                     minEnemyDist = dist;
+                     closestEnemy = enemy;
+                 }
+             }
+         });
+
+         if (closestEnemy) {
+             target = closestEnemy;
+         } else {
+             let closestBuilding: BaseEntity | null = null;
+             let minBuildingDist = Infinity;
+
+             allEnemies.forEach(enemy => {
+                 if (enemy.hp <= 0) return;
+                 if (enemy.type === 'tower' || enemy.isBuilding) {
+                     const dist = Math.abs(unit.x - enemy.x);
+                     if (dist < minBuildingDist) {
+                         minBuildingDist = dist;
+                         closestBuilding = enemy;
+                     }
+                 }
+             });
+             target = closestBuilding;
+         }
+      }
+
+      if (target) {
+          unit.targetId = target.id;
+          const dist = Math.abs(unit.x - target.x);
+          
+          if (dist <= unit.range) {
+              unit.state = 'attacking';
+              
+              if (performance.now() - unit.lastAttackTime > unit.attackCooldown) {
+                  
+                  if (unit.type === 'archer' || unit.type === 'wizard') {
+                      const isMagic = unit.type === 'wizard';
+                      playSound(isMagic ? 'magic' : 'arrow');
+                      projectilesRef.current.push({
+                          x: unit.x, y: unit.y + 10,
+                          tx: target.x, ty: target.y + 10,
+                          speed: isMagic ? 350 : 400, 
+                          color: isMagic ? '#f472b6' : '#fcd34d', 
+                          damage: unit.damage,
+                          isArrow: !isMagic, 
+                          isMagic: isMagic,
+                          area: isMagic,
+                          areaRadius: 40,
+                          ownerTeam: unit.team, 
+                          targetId: target.id
+                      });
+                  } else if (unit.type === 'cannon') {
+                      playSound('cannon');
+                      projectilesRef.current.push({
+                          x: unit.x, y: unit.y,
+                          tx: target.x, ty: target.y + 10,
+                          speed: 400, color: '#111', damage: unit.damage,
+                          isCannonball: true,
+                          ownerTeam: unit.team, targetId: target.id
+                      });
+                  } else if (unit.type === 'bats') {
+                      playSound('attack'); 
+                      target.hp -= unit.damage;
+                  } else {
+                      playSound('attack');
+                      let dmg = unit.damage;
+                      if (unit.type === 'dragon') {
+                          unit.rampUpValue = Math.min((unit.rampUpValue || 0) + 8, 200); 
+                          dmg += unit.rampUpValue;
+                      }
+                      target.hp -= dmg;
+                      for(let i=0; i<3; i++) {
+                        particlesRef.current.push({
+                            x: target.x + (Math.random()*40-20),
+                            y: target.y + (Math.random()*40-20),
+                            life: 1, color: '#fff',
+                            vx: Math.random()*2-1, vy: Math.random()*2-1
+                        });
+                      }
+                  }
+                  unit.lastAttackTime = performance.now();
+              }
+          } else {
+              unit.state = 'moving';
+              const dir = target.x > unit.x ? 1 : -1;
+              if (!unit.isBuilding) {
+                  unit.x += (unit.speed * dt / 1000) * dir;
+              }
+          }
+      } else {
+          unit.state = 'idle';
+          unit.targetId = null;
+          unit.rampUpValue = 0;
+      }
+    });
+
+    // 4. Towers Update
+    towersRef.current.forEach(tower => {
+        if(tower.hp <= 0) return;
+        if(tower.frozenUntil && tower.frozenUntil > performance.now()) return;
+        
+        let target = null;
+        if (tower.targetId) {
+            const locked = unitsRef.current.find(u => u.id === tower.targetId);
+            if (locked && locked.hp > 0 && Math.abs(locked.x - tower.x) <= tower.range) {
+                target = locked;
+            } else {
+                tower.targetId = null; 
+            }
+        }
+
+        if (!target) {
+            const enemies = unitsRef.current.filter(u => u.team !== tower.team && u.hp > 0);
+            let minDist = tower.range;
+            enemies.forEach(u => {
+                const dist = Math.abs(u.x - tower.x);
+                if (dist <= minDist) {
+                    minDist = dist;
+                    target = u;
+                }
+            });
+            if (target) tower.targetId = (target as Unit).id;
+        }
+
+        if (target && performance.now() - tower.lastAttackTime > tower.attackCooldown) {
+            playSound('arrow');
+            const dist = Math.abs(tower.x - target.x);
+            const damageMult = dist > 250 ? 0.5 : 1.0; 
+
+            projectilesRef.current.push({
+                x: tower.x + tower.width/2,
+                y: tower.y,
+                tx: target.x,
+                ty: target.y,
+                speed: 450,
+                color: tower.team === 'left' ? '#60a5fa' : '#f87171',
+                damage: tower.damage * damageMult,
+                ownerTeam: tower.team,
+                isArrow: true,
+                targetId: target.id
+            });
+            tower.lastAttackTime = performance.now();
+        }
+    });
+
+    // 5. Projectiles
+    projectilesRef.current.forEach((p, idx) => {
+        if (p.isLog) {
+            p.x += (p.speed * dt) / 1000;
+            p.life! -= Math.abs((p.speed * dt) / 1000);
+            const enemies = unitsRef.current.filter(u => u.team !== p.ownerTeam);
+            enemies.forEach(e => {
+                if (e.isFlying) return;
+                if (p.hitIds?.includes(e.id)) return;
+                if (Math.abs(e.x - p.x) < 30) {
+                    e.hp -= p.damage!;
+                    p.hitIds?.push(e.id);
+                    if (!e.isBuilding) {
+                        e.x += (p.speed > 0 ? 40 : -40); 
+                    }
+                }
+            });
+            if (p.life! <= 0) projectilesRef.current.splice(idx, 1);
+            return;
+        }
+
+        if ((p.isArrow || p.isCannonball) && p.targetId) {
+             const target = [...unitsRef.current, ...towersRef.current].find(t => t.id === p.targetId);
+             if (target && target.hp > 0) {
+                 p.tx = target.x;
+                 p.ty = target.y + target.height/2;
+             }
+        }
+
+        const dx = p.tx - p.x;
+        const dy = p.ty - p.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist < 15) {
+            if (p.area) {
+                playSound('explosion');
+                const radius = p.areaRadius || 80;
+                unitsRef.current.forEach(t => {
+                   if (t.team !== p.ownerTeam && Math.abs(t.x - p.tx) < radius) {
+                       t.hp -= p.damage || 0;
+                   }
+                });
+                towersRef.current.forEach(t => {
+                    if (t.team !== p.ownerTeam && Math.abs(t.x + t.width/2 - p.tx) < radius) {
+                        t.hp -= (p.damage || 0) * (p.isMagic ? 1.0 : 0.35); 
+                    }
+                });
+                for(let i=0; i<10; i++) {
+                    particlesRef.current.push({
+                        x: p.tx, y: LANE_Y, life: 1.0, color: p.color,
+                        vx: Math.random()*10-5, vy: Math.random()*10-5
+                    });
+                }
+            } else {
+                const targets = unitsRef.current.filter(u => Math.abs(u.x - p.tx) < 30 && u.team !== p.ownerTeam);
+                if (targets.length > 0) targets[0].hp -= p.damage || 0;
+                const towers = towersRef.current.filter(t => Math.abs((t.x+t.width/2) - p.tx) < 30 && t.team !== p.ownerTeam);
+                if (towers.length > 0) towers[0].hp -= p.damage || 0;
+            }
+            projectilesRef.current.splice(idx, 1);
+        } else {
+            const move = (p.speed * dt) / 1000;
+            p.x += (dx / dist) * move;
+            p.y += (dy / dist) * move;
+        }
+    });
+
+    // 6. Cleanup
+    unitsRef.current = unitsRef.current.filter(u => u.hp > 0);
+    
+    if (!isTiebreaker) {
+        if (towersRef.current[0].hp <= 0) { setWinner('right'); playSound('lose'); }
+        if (towersRef.current[1].hp <= 0) { setWinner('left'); playSound('win'); }
+    }
+  };
+
+  const draw = (ctx: CanvasRenderingContext2D) => {
+      // BG - NIGHT WAR ZONE
+      const grad = ctx.createLinearGradient(0, 0, 0, LANE_Y);
+      grad.addColorStop(0, '#0c0a09'); 
+      grad.addColorStop(1, '#292524'); 
+      ctx.fillStyle = grad;
+      ctx.fillRect(0,0, CANVAS_WIDTH, LANE_Y);
+
+      // Stars
+      starsRef.current.forEach(star => {
+         ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha * 0.5})`;
+         ctx.beginPath(); ctx.arc(star.x, star.y, Math.random() > 0.9 ? 2 : 1, 0, Math.PI*2); ctx.fill();
+      });
+
+      // Moon
+      ctx.fillStyle = '#fca5a5'; 
+      ctx.shadowBlur = 40; ctx.shadowColor = '#7f1d1d';
+      ctx.beginPath(); ctx.arc(CANVAS_WIDTH - 100, 80, 40, 0, Math.PI*2); ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // UNIFIED GROUND
+      ctx.fillStyle = '#3f3f46'; // Base Ground Color
+      ctx.fillRect(0, LANE_Y, CANVAS_WIDTH, CANVAS_HEIGHT - LANE_Y);
+      
+      // Lane Decoration (Path)
+      ctx.fillStyle = 'rgba(0,0,0,0.2)'; 
+      ctx.fillRect(0, LANE_Y, CANVAS_WIDTH, 40);
+      
+      // Craters
+      cratersRef.current.forEach(c => {
+          ctx.fillStyle = 'rgba(0,0,0,0.3)';
+          ctx.beginPath();
+          ctx.ellipse(c.x, c.y, c.width, c.height, 0, 0, Math.PI*2);
+          ctx.fill();
+      });
+
+      // Bridge
+      ctx.strokeStyle = '#52525b';
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(CANVAS_WIDTH/2, LANE_Y); ctx.lineTo(CANVAS_WIDTH/2, LANE_Y+40); ctx.stroke();
+      ctx.lineWidth = 1;
+
+      // Towers
+      towersRef.current.forEach(t => {
+          if (t.hp <= 0) return;
+          if (t.frozenUntil && t.frozenUntil > performance.now()) {
+              ctx.shadowBlur = 20;
+              ctx.shadowColor = '#06b6d4';
+          }
+          ctx.font = '60px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(t.team === 'left' ? '🏰' : '🏯', t.x + t.width/2, t.y + 60);
+          ctx.shadowBlur = 0; 
+          
+          const pct = Math.max(0, t.hp / t.maxHp);
+          ctx.fillStyle = '#ef4444';
+          ctx.fillRect(t.x, t.y - 10, t.width, 6);
+          ctx.fillStyle = '#22c55e';
+          ctx.fillRect(t.x, t.y - 10, t.width * pct, 6);
+      });
+
+      // Units
+      unitsRef.current.forEach(u => {
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.beginPath(); ctx.ellipse(u.x, LANE_Y + 20, u.width/2, 5, 0, 0, Math.PI*2); ctx.fill();
+
+          ctx.font = '30px Arial';
+          ctx.textAlign = 'center';
+          let icon = '♟️';
+          if (u.type === 'knight') icon = '⚔️';
+          if (u.type === 'giant') { ctx.font='50px Arial'; icon = '💪'; }
+          if (u.type === 'archer') icon = '🏹';
+          if (u.type === 'skeleton') { ctx.font='20px Arial'; icon = '💀'; }
+          if (u.type === 'dragon') icon = '🐲';
+          if (u.type === 'cannon') icon = '💣';
+          if (u.type === 'wizard') icon = '🧙‍♂️';
+          if (u.type === 'mini_pekka') icon = '🤖';
+          if (u.type === 'bats') { ctx.font='20px Arial'; icon = '🦇'; }
+
+          ctx.save();
+          if (u.frozenUntil && u.frozenUntil > performance.now()) {
+               ctx.fillStyle = 'rgba(6, 182, 212, 0.5)';
+               ctx.beginPath(); ctx.arc(u.x, u.y + u.height/2, 25, 0, Math.PI*2); ctx.fill();
+          }
+
+          let animOffsetX = 0;
+          if (u.state === 'attacking' && !u.isBuilding && u.type !== 'dragon' && u.type !== 'archer' && u.type !== 'wizard') {
+             const progress = (performance.now() - u.lastAttackTime) / u.attackCooldown;
+             if (progress < 0.2) { 
+                 animOffsetX = (u.team === 'left' ? 10 : -10);
+             }
+          }
+          
+          ctx.translate(u.x + animOffsetX, u.y);
+          if (u.team === 'right') ctx.scale(-1, 1);
+          
+          ctx.fillStyle = u.team === 'left' ? 'rgba(59, 130, 246, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+          ctx.beginPath();
+          ctx.arc(0, u.height/2, 20, 0, Math.PI*2);
+          ctx.fill();
+
+          ctx.fillText(icon, 0, u.height/2);
+          ctx.restore();
+
+          if (u.type === 'dragon' && u.state === 'attacking' && u.targetId && (!u.frozenUntil || u.frozenUntil < performance.now())) {
+             const target = [...unitsRef.current, ...towersRef.current].find(t => t.id === u.targetId);
+             if (target) {
+                 ctx.save();
+                 ctx.strokeStyle = '#f59e0b';
+                 ctx.lineWidth = 2 + (u.rampUpValue || 0) / 40; 
+                 ctx.lineCap = 'round';
+                 ctx.beginPath();
+                 ctx.moveTo(u.x, u.y + u.height/2);
+                 ctx.lineTo(target.x, target.y + target.height/2);
+                 ctx.stroke();
+                 ctx.restore();
+             }
+          }
+
+          const pct = u.hp / u.maxHp;
+          ctx.fillStyle = 'red';
+          ctx.fillRect(u.x - 10, u.y - 20, 20, 4);
+          ctx.fillStyle = '#22c55e';
+          ctx.fillRect(u.x - 10, u.y - 20, 20 * pct, 4);
+      });
+
+      // Projectiles
+      projectilesRef.current.forEach(p => {
+          if (p.isLog) {
+              ctx.save();
+              ctx.translate(p.x, p.y);
+              ctx.rotate(Date.now() / 100);
+              ctx.font = '30px Arial';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText('🪵', 0, 0);
+              ctx.restore();
+          } else if (p.isArrow) {
+              ctx.save();
+              ctx.translate(p.x, p.y);
+              const angle = Math.atan2(p.ty - p.y, p.tx - p.x);
+              ctx.rotate(angle);
+              ctx.fillStyle = '#d97706'; 
+              ctx.fillRect(-10, -1, 20, 2); 
+              ctx.fillStyle = '#fcd34d'; 
+              ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(5, -3); ctx.lineTo(5, 3); ctx.fill();
+              ctx.restore();
+          } else if (p.isCannonball) {
+              ctx.fillStyle = '#111827';
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+              ctx.fill();
+          } else {
+              ctx.fillStyle = p.color;
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, p.area ? (p.isMagic ? 6 : 10) : 4, 0, Math.PI*2);
+              ctx.fill();
+          }
+      });
+
+      particlesRef.current.forEach((p, i) => {
+          ctx.globalAlpha = p.life;
+          ctx.fillStyle = p.color;
+          ctx.fillRect(p.x, p.y, 4, 4);
+          p.x += p.vx;
+          p.y += p.vy;
+          p.life -= 0.05;
+          if(p.life <= 0) particlesRef.current.splice(i, 1);
+      });
+      ctx.globalAlpha = 1;
+  };
+
+  const gameLoop = (time: number) => {
+    if (lastTimeRef.current === 0) lastTimeRef.current = time;
+    const dt = time - lastTimeRef.current;
+    lastTimeRef.current = time;
+    
+    update(dt);
+    if(canvasRef.current) draw(canvasRef.current.getContext('2d')!);
+    requestRef.current = requestAnimationFrame(gameLoop);
+  };
+
+  useEffect(() => {
+     requestRef.current = requestAnimationFrame(gameLoop);
+     return () => cancelAnimationFrame(requestRef.current!);
+  }, [view, winner, elixir, difficulty]); 
+
+  // --- Input Handlers ---
+
+  const handleDragStart = (e: React.MouseEvent | React.TouchEvent, card: CardType) => {
+     if (elixir < CARDS[card].cost || cardCooldowns[card]) return;
+     setDraggingCard(card);
+  };
+
+  const handleDragMove = useCallback((e: MouseEvent | TouchEvent) => {
+      if (!draggingCard) return;
+      let cx, cy;
+      if (e instanceof MouseEvent) { cx = e.clientX; cy = e.clientY; }
+      else { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+      setDragPos({ x: cx, y: cy });
+  }, [draggingCard]);
+
+  const handleDragEnd = useCallback((e: MouseEvent | TouchEvent) => {
+      if (!draggingCard) return;
+      if (canvasRef.current) {
+         const rect = canvasRef.current.getBoundingClientRect();
+         let clientX, clientY;
+         if (e instanceof MouseEvent) { clientX = e.clientX; clientY = e.clientY; }
+         else { clientX = e.changedTouches[0].clientX; clientY = e.changedTouches[0].clientY; }
+
+         const inCanvas = 
+            clientX >= rect.left && 
+            clientX <= rect.right && 
+            clientY >= rect.top && 
+            clientY <= rect.bottom;
+
+         if (inCanvas) {
+             const scaleX = CANVAS_WIDTH / rect.width;
+             const gameX = (clientX - rect.left) * scaleX;
+             handleCardUse(draggingCard, gameX);
+         }
+      }
+      setDraggingCard(null);
+  }, [draggingCard, elixir]);
+
+  useEffect(() => {
+     window.addEventListener('mousemove', handleDragMove);
+     window.addEventListener('mouseup', handleDragEnd);
+     window.addEventListener('touchmove', handleDragMove);
+     window.addEventListener('touchend', handleDragEnd);
+     return () => {
+         window.removeEventListener('mousemove', handleDragMove);
+         window.removeEventListener('mouseup', handleDragEnd);
+         window.removeEventListener('touchmove', handleDragMove);
+         window.removeEventListener('touchend', handleDragEnd);
+     }
+  }, [handleDragMove, handleDragEnd]);
+
+
+  // --- Render Views ---
+
+  if (view === 'menu') {
+      return (
+          <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-4 font-sans">
+              <h1 className="text-6xl font-black bg-gradient-to-br from-yellow-400 to-red-600 bg-clip-text text-transparent mb-2">
+                  CLASH BATTLE
+              </h1>
+              {/* Added Text Here - Bold and Gradient */}
+              <p className="font-bold italic text-sm mb-8 transform -skew-x-6 bg-gradient-to-br from-yellow-400 to-red-600 bg-clip-text text-transparent opacity-80">
+                  inspired by clash royale before it became pay 2 win
+              </p>
+
+              <div className="space-y-4 w-full max-w-xs">
+                  {['easy', 'medium', 'hard'].map(d => (
+                      <button 
+                        key={d}
+                        onClick={() => { setDifficulty(d as Difficulty); initGame(); setView('game'); }}
+                        className="w-full py-4 bg-gray-800 border-2 border-gray-700 hover:border-yellow-500 rounded-xl font-bold text-xl uppercase tracking-widest transition-all hover:scale-105"
+                      >
+                          {d} Mode
+                      </button>
+                  ))}
+                  <button 
+                    onClick={() => setView('credits')}
+                    className="w-full py-3 text-gray-400 hover:text-white transition"
+                  >
+                      Credits / How to Play
+                  </button>
+              </div>
+          </div>
+      );
+  }
+
+  if (view === 'credits') {
+      return (
+          <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-4 py-10">
+              <div className="w-full max-w-2xl bg-gray-800 p-8 rounded-2xl border border-gray-700 overflow-y-auto max-h-[85vh]">
+                  <h2 className="text-3xl font-bold mb-4 text-yellow-500 sticky top-0 bg-gray-800 pb-2">How to Play</h2>
+                  <ul className="list-disc pl-5 space-y-2 text-gray-300 mb-8 text-sm md:text-base">
+                      <li>Drag cards from the bottom onto the LEFT side of the field.</li>
+                      <li>Destroy the enemy tower to win!</li>
+                      <li>Elixir regenerates over time. Spend wisely.</li>
+                      <li><strong>Counters:</strong> Skeletons beat Giants, Archers beat Skeletons, Fireball clears swarms.</li>
+                  </ul>
+
+                  <h3 className="text-2xl font-bold mb-4 text-blue-400 sticky top-12 bg-gray-800 pb-2 border-b border-gray-700">Troop Guide</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                      {Object.values(CARDS).map(card => (
+                          <div key={card.id} className="flex items-center gap-3 bg-gray-700/50 p-3 rounded-lg border border-gray-600">
+                              <div className="text-4xl">{card.icon}</div>
+                              <div>
+                                  <div className="font-bold text-yellow-500 flex justify-between w-full">
+                                      <span>{card.name}</span>
+                                      <span className="text-purple-400 text-sm">💧 {card.cost}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-300 leading-tight">{card.description}</div>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+
+                  <div className="border-t border-gray-700 pt-6 text-center">
+                      <p className="text-gray-400 text-sm uppercase tracking-widest mb-2">Created By</p>
+                      <p className="text-2xl font-bold">Nhat Nam Do</p>
+                      <p className="text-blue-400">namdok2k3@gmail.com</p>
+                  </div>
+                  <button onClick={() => setView('menu')} className="mt-8 w-full py-3 bg-gray-700 rounded-lg font-bold hover:bg-gray-600 transition">Back to Menu</button>
+              </div>
+          </div>
+      );
+  }
+
+  // GAME VIEW
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-950 text-white overflow-hidden select-none touch-none">
+      
+      {/* Top Bar */}
+      <div className="w-full max-w-4xl flex justify-between items-center p-4 bg-gray-900 border-b border-gray-800">
+         <button onClick={() => setView('menu')} className="text-sm text-gray-500 hover:text-white">Exit</button>
+         
+         <div className="flex flex-col items-center">
+            <div className={`text-2xl font-mono font-bold ${timeRemaining <= 60 ? 'text-red-500 animate-pulse' : 'text-white'}`}>
+                {Math.floor(timeRemaining / 60)}:{(Math.floor(timeRemaining) % 60).toString().padStart(2, '0')}
+            </div>
+            {isTiebreaker ? (
+                <div className="text-xs font-bold text-red-500 animate-bounce">TIEBREAKER!</div>
+            ) : doubleElixir && (
+                <div className="text-xs font-bold text-purple-400 animate-bounce">2x ELIXIR</div>
+            )}
+         </div>
+
+         <div className="font-mono text-yellow-500">{difficulty.toUpperCase()}</div>
+      </div>
+
+      {/* Game Canvas */}
+      <div className="relative">
+          <canvas 
+            ref={canvasRef} 
+            width={CANVAS_WIDTH} 
+            height={CANVAS_HEIGHT} 
+            className={`bg-gray-900 border-x border-gray-800 shadow-2xl transition-all duration-1000 ${isTiebreaker ? 'border-red-500/50 shadow-red-900/50' : ''}`}
+            style={{ width: '100%', maxWidth: '800px', height: 'auto' }}
+          />
+          
+          {/* Winner Overlay */}
+          {winner && (
+              <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center animate-in fade-in duration-500 z-50">
+                  <h1 className={`text-6xl font-black mb-6 ${winner === 'left' ? 'text-blue-500' : 'text-red-500'}`}>
+                      {winner === 'left' ? 'VICTORY!' : 'DEFEAT'}
+                  </h1>
+                  
+                  <div className="flex gap-4">
+                      <button onClick={() => setView('menu')} className="px-6 py-3 bg-gray-700 text-white font-bold rounded-full hover:bg-gray-600 transition">
+                          Menu
+                      </button>
+                      
+                      <button onClick={initGame} className="px-6 py-3 bg-white text-black font-bold rounded-full hover:scale-105 transition">
+                          Play Again
+                      </button>
+
+                      {winner === 'left' && difficulty !== 'hard' && (
+                          <button onClick={handleNextLevel} className="px-6 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 text-black font-bold rounded-full hover:scale-105 transition shadow-lg shadow-orange-500/50">
+                              Next Level ➡
+                          </button>
+                      )}
+                  </div>
+              </div>
+          )}
+
+          {/* Invalid Drop Zone Indicator (Right Side) */}
+          {draggingCard && draggingCard !== 'fireball' && draggingCard !== 'log' && draggingCard !== 'freeze' && (
+              <div className="absolute top-0 right-0 w-1/2 h-full bg-red-500/10 border-l-2 border-red-500/50 flex items-center justify-center">
+                  <span className="text-red-500 font-bold bg-black/50 px-2 rounded">No Deploy Zone</span>
+              </div>
+          )}
+      </div>
+
+      {/* HUD / Card Deck */}
+      <div className="w-full max-w-4xl bg-gray-900 p-4 border-t border-gray-800 mt-auto">
+          {/* Elixir Bar */}
+          <div className="flex items-center gap-4 mb-4">
+              <div className="relative flex-1 h-8 bg-black/80 rounded-full overflow-hidden border-2 border-gray-600 shadow-inner group">
+                  {/* Background Grid Lines (1-9) */}
+                  <div className="absolute inset-0 flex z-10 pointer-events-none">
+                      {Array.from({length: 9}).map((_, i) => (
+                          <div key={i} className="flex-1 border-r border-gray-500/50 h-full last:border-0" />
+                      ))}
+                  </div>
+
+                  <div 
+                    className={`h-full transition-all duration-75 ease-linear ${doubleElixir ? 'bg-gradient-to-r from-pink-500 to-purple-600' : 'bg-gradient-to-r from-purple-500 to-fuchsia-600'}`}
+                    style={{ width: `${(elixir / 10) * 100}%` }}
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center font-black text-white drop-shadow-md text-sm tracking-wider z-20 text-shadow">
+                      {Math.floor(elixir)} / 10
+                  </span>
+              </div>
+              <div className="text-xs text-gray-500 text-center">
+                  NEXT:<br/>
+                  <div className="w-10 h-10 bg-gray-800 rounded border border-gray-700 flex items-center justify-center text-xl grayscale opacity-50">
+                      {CARDS[nextCard].icon}
+                  </div>
+              </div>
+          </div>
+
+          {/* Hand */}
+          <div className="flex justify-center gap-2 md:gap-4 overflow-x-auto pb-2">
+              {hand.map(cardId => {
+                  const stats = CARDS[cardId];
+                  const canAfford = elixir >= stats.cost;
+                  const onCooldown = cardCooldowns[cardId] && cardCooldowns[cardId] > Date.now();
+                  
+                  return (
+                      <div 
+                        key={cardId}
+                        onMouseDown={(e) => handleDragStart(e, cardId)}
+                        onTouchStart={(e) => handleDragStart(e, cardId)}
+                        className={`
+                            relative group flex-shrink-0 w-20 h-28 md:w-24 md:h-32 bg-gray-800 rounded-lg border-2 
+                            flex flex-col items-center justify-between p-2 cursor-pointer transition-all select-none
+                            ${canAfford && !onCooldown ? 'border-gray-600 hover:border-yellow-400 hover:-translate-y-2 shadow-lg hover:shadow-yellow-900/20' : 'border-gray-800 opacity-50 grayscale'}
+                        `}
+                      >
+                          <div className="text-xs font-bold text-gray-400 w-full text-center truncate">{stats.name}</div>
+                          <div className="text-4xl md:text-5xl drop-shadow-lg">{stats.icon}</div>
+                          <div className={`
+                             w-full text-center font-black text-sm md:text-base border-t border-gray-700 pt-1
+                             ${canAfford ? 'text-purple-400' : 'text-red-500'}
+                          `}>
+                              {stats.cost}
+                          </div>
+
+                          {/* Cooldown Overlay */}
+                          {onCooldown && (
+                              <div className="absolute inset-0 bg-black/60 rounded flex items-center justify-center">
+                                  <div className="animate-spin w-6 h-6 border-2 border-white border-t-transparent rounded-full" />
+                              </div>
+                          )}
+                      </div>
+                  );
+              })}
+          </div>
+      </div>
+
+      {/* Drag Proxy Visual */}
+      {draggingCard && (
+          <div 
+            className="fixed pointer-events-none z-50 opacity-80"
+            style={{ 
+                left: dragPos.x, top: dragPos.y, 
+                transform: 'translate(-50%, -50%) scale(1.2)' 
+            }}
+          >
+              <div className="text-6xl">{CARDS[draggingCard].icon}</div>
+          </div>
+      )}
+
+    </div>
+  );
+}

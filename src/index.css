@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  background-color: #111; /* Dark background */
+  overflow: hidden; /* Prevent scrolling */
+  touch-action: none; /* Prevent zooming on mobile */
+}
