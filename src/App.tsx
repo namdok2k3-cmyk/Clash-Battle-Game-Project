@@ -832,7 +832,8 @@ export default function App() {
         const radius = 120;
         const duration = 4000; 
         const now = performance.now();
-        [...unitsRef.current, ...towersRef.current].forEach(e => {
+        // FIX: Explicitly cast to BaseEntity[] to prevent 'never' type error
+        ([...unitsRef.current, ...towersRef.current] as BaseEntity[]).forEach(e => {
             if (e.team !== team && Math.abs(e.x - xPos) < radius) {
                 e.frozenUntil = now + duration;
                 e.rampUpValue = 0;
@@ -1135,7 +1136,9 @@ export default function App() {
       unit.x = Math.max(0, Math.min(CANVAS_WIDTH, unit.x));
 
       let target: BaseEntity | null = null;
-const allEnemies = [...unitsRef.current.filter(u => u.team !== unit.team), ...towersRef.current.filter(t => t.team !== unit.team)] as BaseEntity[];
+      // FIX: Explicitly cast to BaseEntity[] here
+      const allEnemies = [...unitsRef.current.filter(u => u.team !== unit.team), ...towersRef.current.filter(t => t.team !== unit.team)] as BaseEntity[];
+      
       // Giant Retargeting Logic
       if (unit.type === 'giant') {
           let closestBuilding: BaseEntity | null = null;
@@ -1534,7 +1537,8 @@ const allEnemies = [...unitsRef.current.filter(u => u.team !== unit.team), ...to
           ctx.restore();
 
           if (u.type === 'dragon' && u.state === 'attacking' && u.targetId && (!u.frozenUntil || u.frozenUntil < performance.now())) {
-             const target = [...unitsRef.current, ...towersRef.current].find(t => t.id === u.targetId);
+             // FIX: Explicitly cast to BaseEntity[] here
+             const target = ([...unitsRef.current, ...towersRef.current] as BaseEntity[]).find(t => t.id === u.targetId);
              if (target) {
                  ctx.save();
                  ctx.strokeStyle = '#f59e0b';
