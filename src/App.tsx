@@ -18,14 +18,14 @@ interface CardStats {
   cooldown: number;
 }
 
-// --- DATA DEFINITIONS (MOVED TO TOP) ---
+// --- DATA DEFINITIONS ---
 
 const CARDS: Record<CardType, CardStats> = {
   knight: { id: 'knight', name: 'Knight', cost: 3, icon: '⚔️', description: 'Melee mini-tank. Good stats for cost.', cooldown: 3000 },
   giant: { id: 'giant', name: 'Giant', cost: 5, icon: '💪', description: 'Ignores troops. Attacks buildings only.', cooldown: 5000 },
   archer: { id: 'archer', name: 'Archer', cost: 3, icon: '🏹', description: 'Ranged attackers. Good vs air.', cooldown: 3000 },
   skeleton_army: { id: 'skeleton_army', name: 'Skel Army', cost: 3, icon: '💀', description: 'Swarm of skeletons. Weak to splash.', cooldown: 6000 },
-  bats: { id: 'bats', name: 'Bats', cost: 2, icon: '🦇', description: 'Fast flying swarm. Cheap cycle.', cooldown: 3000 },
+  bats: { id: 'bats', name: 'Bats', cost: 3, icon: '🦇', description: 'Fast flying swarm. Good DPS.', cooldown: 3000 },
   dragon: { id: 'dragon', name: 'Inf Dragon', cost: 4, icon: '🐲', description: 'Flying. Damage ramps up over time.', cooldown: 7000 },
   wizard: { id: 'wizard', name: 'Wizard', cost: 5, icon: '🧙‍♂️', description: 'Deals area damage (Splash).', cooldown: 5000 },
   mini_pekka: { id: 'mini_pekka', name: 'Mini P.E.K.K.A', cost: 4, icon: '🤖', description: 'High single target damage. Glass cannon.', cooldown: 4000 },
@@ -106,7 +106,6 @@ const callGemini = async (prompt: string, systemPrompt: string) => {
         const data = await response.json();
         return data.candidates?.[0]?.content?.parts?.[0]?.text;
     } catch (e) {
-        // console.error("Gemini API Error:", e);
         return null;
     }
 };
@@ -125,7 +124,7 @@ const getAudioContext = () => {
 };
 
 // SFX Player
-const playSound = (type: 'spawn' | 'attack' | 'explosion' | 'win' | 'lose' | 'log' | 'arrow' | 'freeze' | 'magic' | 'time' | 'squeak' | 'cannon' | 'full' | 'draw' | 'tiebreaker' | 'chat') => {
+const playSound = (type: 'spawn' | 'attack' | 'explosion' | 'win' | 'lose' | 'log' | 'arrow' | 'freeze' | 'magic' | 'time' | 'squeak' | 'cannon' | 'full' | 'draw' | 'tiebreaker' | 'chat' | 'wolf') => {
   try {
     const ctx = getAudioContext();
     if (!ctx) return;
@@ -138,6 +137,17 @@ const playSound = (type: 'spawn' | 'attack' | 'explosion' | 'win' | 'lose' | 'lo
     const now = ctx.currentTime;
     
     switch (type) {
+      case 'wolf': 
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(500, now + 1); 
+        osc.frequency.linearRampToValueAtTime(300, now + 2.5); 
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.05, now + 0.5);
+        gain.gain.linearRampToValueAtTime(0, now + 2.5);
+        osc.start(now);
+        osc.stop(now + 2.5);
+        break;
       case 'spawn':
         osc.type = 'sine';
         osc.frequency.setValueAtTime(400, now);
@@ -166,7 +176,6 @@ const playSound = (type: 'spawn' | 'attack' | 'explosion' | 'win' | 'lose' | 'lo
         osc.stop(now + 0.1);
         break;
       case 'time':
-        // SINGLE short alert
         osc.type = 'triangle'; 
         osc.frequency.setValueAtTime(600, now);
         osc.frequency.linearRampToValueAtTime(400, now + 0.3); 
@@ -180,17 +189,14 @@ const playSound = (type: 'spawn' | 'attack' | 'explosion' | 'win' | 'lose' | 'lo
         const gain2 = ctx.createGain();
         osc2.connect(gain2);
         gain2.connect(ctx.destination);
-        
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, now); // A5
+        osc.frequency.setValueAtTime(880, now); 
         gain.gain.setValueAtTime(0.1, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
-        
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(1108, now); // C#6
+        osc2.frequency.setValueAtTime(1108, now); 
         gain2.gain.setValueAtTime(0.08, now);
         gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
-
         osc.start(now); osc.stop(now + 1.5);
         osc2.start(now); osc2.stop(now + 1.5);
         break;
@@ -501,7 +507,8 @@ const createUnit = (team: Team, type: EntityType, xPos?: number): Unit[] => {
       stats = { ...stats, width: 30, height: 40, hp: 750, maxHp: 750, damage: 80, speed: 50, range: 40, sightRange: 200, attackCooldown: 1200, cost: 3 };
       break;
     case 'giant':
-      stats = { ...stats, width: 50, height: 70, hp: 2200, maxHp: 2200, damage: 140, speed: 30, range: 40, sightRange: 600, attackCooldown: 1500, cost: 5 };
+      // BUFFED: HP 2000
+      stats = { ...stats, width: 50, height: 70, hp: 2000, maxHp: 2000, damage: 105, speed: 30, range: 40, sightRange: 600, attackCooldown: 1500, cost: 5 };
       break;
     case 'archer':
       stats = { ...stats, width: 25, height: 35, hp: 200, maxHp: 200, damage: 45, range: 170, sightRange: 220, speed: 50, attackCooldown: 1000, cost: 3 };
@@ -510,7 +517,8 @@ const createUnit = (team: Team, type: EntityType, xPos?: number): Unit[] => {
       stats = { ...stats, width: 15, height: 20, hp: 50, maxHp: 50, damage: 40, range: 20, sightRange: 200, speed: 65, attackCooldown: 800, cost: 1 }; // Approx cost per unit in swarm
       break;
     case 'bats':
-      stats = { ...stats, width: 20, height: 15, hp: 40, maxHp: 40, damage: 40, range: 20, sightRange: 200, speed: 85, isFlying: true, attackCooldown: 600, color: isLeft ? '#818cf8' : '#7f1d1d', cost: 1 }; 
+      // COST 3
+      stats = { ...stats, width: 20, height: 15, hp: 40, maxHp: 40, damage: 40, range: 20, sightRange: 200, speed: 85, isFlying: true, attackCooldown: 600, color: isLeft ? '#818cf8' : '#7f1d1d', cost: 3 }; 
       break;
     case 'dragon':
       stats = { ...stats, width: 40, height: 30, hp: 400, maxHp: 400, damage: 5, range: 110, sightRange: 200, speed: 45, isFlying: true, attackCooldown: 400, cost: 4 };
@@ -590,6 +598,7 @@ const createTower = (team: Team): Tower => {
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const menuCanvasRef = useRef<HTMLCanvasElement>(null); 
   const requestRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
   
@@ -598,7 +607,15 @@ export default function App() {
   const projectilesRef = useRef<Projectile[]>([]);
   const particlesRef = useRef<{x: number, y: number, life: number, color: string, vx: number, vy: number}[]>([]);
   const starsRef = useRef<{x: number, y: number, alpha: number}[]>([]); 
-  const cratersRef = useRef<{x: number, y: number, width: number, height: number}[]>([]);
+  const groundDetailRef = useRef<{x: number, y: number, size: number, type: 'stone' | 'crack'}[]>([]); // New Texture System
+  // SCENERY - Just rocks and dead grass
+  const debrisRef = useRef<{x: number, y: number, size: number, type: 'rock' | 'grass'}[]>([]);
+  // SHOOTING STARS
+  const shootingStarsRef = useRef<{x: number, y: number, vx: number, vy: number, life: number}[]>([]);
+  const shootingStarCountRef = useRef(0);
+  // WOLF
+  const wolfTimerRef = useRef(0);
+  const wolfHowlRef = useRef<{active: boolean, x: number, y: number, progress: number} | null>(null);
 
   const [view, setView] = useState<GameView>('menu');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
@@ -681,6 +698,12 @@ export default function App() {
   };
 
   // --- Local Fallback Chat Logic ---
+  const ENEMY_WIN_TAUNTS = [
+      "Imagine losing to a bot...", "He he he ha", "Too easy!", "L"
+  ];
+  const ENEMY_LOSE_TAUNTS = [
+      "Wow...", "U got lucky", "This is not over!"
+  ];
   const LOCAL_TAUNTS = [
       "Hehehehe!", "Oops!", "Is that all?", "My tower!!!", "Stop that!", "I will win!", "Beat me if u can!", "Grrr!"
   ];
@@ -689,11 +712,21 @@ export default function App() {
       if (Date.now() < aiChatCooldownRef.current) return;
       aiChatCooldownRef.current = Date.now() + 5000; 
 
-      if (Math.random() > 0.5) {
-          const randomTaunt = LOCAL_TAUNTS[Math.floor(Math.random() * LOCAL_TAUNTS.length)];
-          setOpponentMessage(randomTaunt);
+      let message = "";
+
+      // Override for Game Over
+      if (context === "win") {
+          message = ENEMY_LOSE_TAUNTS[Math.floor(Math.random() * ENEMY_LOSE_TAUNTS.length)];
+      } else if (context === "lose") {
+          message = ENEMY_WIN_TAUNTS[Math.floor(Math.random() * ENEMY_WIN_TAUNTS.length)];
+      } else if (Math.random() > 0.5) {
+          message = LOCAL_TAUNTS[Math.floor(Math.random() * LOCAL_TAUNTS.length)];
+      }
+
+      if (message) {
+          setOpponentMessage(message);
           playSound('chat');
-          setTimeout(() => setOpponentMessage(null), 3500);
+          setTimeout(() => setOpponentMessage(null), 4000);
           return;
       }
 
@@ -766,21 +799,42 @@ export default function App() {
     towersRef.current = [createTower('left'), createTower('right')];
     projectilesRef.current = [];
     particlesRef.current = [];
+    shootingStarsRef.current = [];
+    shootingStarCountRef.current = 0;
+    wolfTimerRef.current = 0;
+    wolfHowlRef.current = null;
     
-    // Scenery Generation
-    starsRef.current = Array.from({length: 50}).map(() => ({
+    // Scenery Generation (Stars)
+    starsRef.current = Array.from({length: 100}).map(() => ({ // More stars
         x: Math.random() * CANVAS_WIDTH,
         y: Math.random() * (LANE_Y - 50),
         alpha: Math.random() * 0.8 + 0.2
     }));
     
-    // Generate Craters
-    cratersRef.current = Array.from({length: 8}).map(() => ({
+    // Generate Ground Details (Cracked Earth / Cobblestones)
+    groundDetailRef.current = Array.from({length: 40}).map(() => ({
         x: Math.random() * CANVAS_WIDTH,
-        y: LANE_Y + Math.random() * 80,
-        width: 30 + Math.random() * 30,
-        height: 10 + Math.random() * 10
+        y: LANE_Y + Math.random() * 90,
+        size: 5 + Math.random() * 15,
+        type: Math.random() > 0.5 ? 'stone' : 'crack'
     }));
+
+    // Generate Scenery (Debris - Rocks & Dead Grass)
+    debrisRef.current = [];
+    const sideWidth = 150; // Width of the side areas
+    for(let i=0; i<25; i++) {
+        const isLeft = Math.random() > 0.5;
+        const x = isLeft ? Math.random() * sideWidth : CANVAS_WIDTH - sideWidth + Math.random() * sideWidth;
+        const type = Math.random() > 0.5 ? 'rock' : 'grass';
+        const size = 5 + Math.random() * 10; 
+
+        debrisRef.current.push({
+            x,
+            y: LANE_Y + Math.random() * 80, 
+            size,
+            type,
+        });
+    }
 
     setWinner(null);
     setElixir(0); 
@@ -832,8 +886,8 @@ export default function App() {
         const radius = 120;
         const duration = 4000; 
         const now = performance.now();
-        // NUCLEAR FIX 1: Use .concat() instead of spread
-        (unitsRef.current as BaseEntity[]).concat(towersRef.current).forEach(e => {
+        // SANTA FIX 1: Nuclear Option - Force TypeScript to treat this as ANY list
+        ([...unitsRef.current, ...towersRef.current] as any[]).forEach((e: BaseEntity) => {
             if (e.team !== team && Math.abs(e.x - xPos) < radius) {
                 e.frozenUntil = now + duration;
                 e.rampUpValue = 0;
@@ -896,8 +950,9 @@ export default function App() {
      const stats = CARDS[card];
      if (elixir < stats.cost) return;
 
-     const isSpell = card === 'fireball' || card === 'log' || card === 'freeze';
-     if (!isSpell && x > CANVAS_WIDTH / 2) return; 
+     const isGlobalSpell = card === 'fireball' || card === 'freeze';
+     // Log is now restricted to user side
+     if (!isGlobalSpell && x > CANVAS_WIDTH / 2) return; 
 
      spawnCard(card, 'left', x);
      setElixir(prev => prev - stats.cost);
@@ -964,11 +1019,11 @@ export default function App() {
                      generateBattleRecap('draw', 0, leftHP, rightHP);
                 } else if (leftHP > rightHP) {
                      setWinner('left'); playSound('win');
-                     triggerOpponentChat("You got lucky this time!");
+                     triggerOpponentChat("win"); // Player won
                      generateBattleRecap('left', 0, leftHP, rightHP);
                 } else {
                      setWinner('right'); playSound('lose');
-                     triggerOpponentChat("Hah! Too easy!");
+                     triggerOpponentChat("lose"); // Player lost
                      generateBattleRecap('right', 0, leftHP, rightHP);
                 }
             }
@@ -1106,7 +1161,8 @@ export default function App() {
             }
 
             if (bestCard) {
-                spawnX = Math.max(CANVAS_WIDTH/2 + 20, Math.min(CANVAS_WIDTH - 20, spawnX));
+                // SPAWN FIX: Increased safety buffer from 20 to 100 to prevent units spawning across bridge
+                spawnX = Math.max(CANVAS_WIDTH/2 + 100, Math.min(CANVAS_WIDTH - 20, spawnX));
                 if (bestCard === 'fireball' || bestCard === 'freeze') spawnX = playerUnits.length > 0 ? playerUnits[0].x : 100;
                 if (bestCard === 'log') spawnX = CANVAS_WIDTH;
 
@@ -1135,14 +1191,17 @@ export default function App() {
       // CLAMP POSITIONS (Prevent walking off-screen)
       unit.x = Math.max(0, Math.min(CANVAS_WIDTH, unit.x));
 
-      let target: BaseEntity | null = null;
-      // NUCLEAR FIX 2: Use .concat() instead of spread
-      const allEnemies = (unitsRef.current.filter(u => u.team !== unit.team) as BaseEntity[])
-                          .concat(towersRef.current.filter(t => t.team !== unit.team));
+      // SANTA FIX 2: Explicitly type 'target' as ANY to ignore errors
+      let target: any = null;
+      
+      // SANTA FIX 3: Nuclear Option - Force TypeScript to treat this as ANY list
+      const allEnemies = ([...unitsRef.current, ...towersRef.current] as any[])
+                          .filter((e: BaseEntity) => e.team !== unit.team) as any[];
       
       // Giant Retargeting Logic
       if (unit.type === 'giant') {
-          let closestBuilding: BaseEntity | null = null;
+          // SANTA FIX: Type as ANY to prevent 'never' inference
+          let closestBuilding: any = null;
           let minBuildingDist = Infinity;
           
           allEnemies.forEach(enemy => {
@@ -1185,7 +1244,7 @@ export default function App() {
       }
 
       if (!target) {
-         let closestEnemy: BaseEntity | null = null;
+         let closestEnemy: any = null;
          let minEnemyDist = Infinity;
          
          allEnemies.forEach(enemy => {
@@ -1205,7 +1264,7 @@ export default function App() {
          if (closestEnemy) {
              target = closestEnemy;
          } else {
-             let closestBuilding: BaseEntity | null = null;
+             let closestBuilding: any = null;
              let minBuildingDist = Infinity;
 
              allEnemies.forEach(enemy => {
@@ -1253,7 +1312,7 @@ export default function App() {
                       projectilesRef.current.push({
                           x: unit.x, y: unit.y,
                           tx: target.x, ty: target.y + 10,
-                          speed: 400, color: '#111', damage: unit.damage,
+                          speed: 400, color: '#ea580c', damage: unit.damage, // MAGMA ORANGE
                           isCannonball: true,
                           ownerTeam: unit.team, targetId: target.id
                       });
@@ -1297,14 +1356,28 @@ export default function App() {
     towersRef.current.forEach(tower => {
         if(tower.hp <= 0) {
             // Trigger chat if tower just died
-            if (!winner && !isTiebreaker && Math.random() > 0.7) {
-                triggerOpponentChat(tower.team === 'left' ? "Hah! I destroyed your tower!" : "No! My tower! You'll pay for that!");
+            if (!winner && !isTiebreaker) {
+                if (tower.team === 'left') {
+                    // Left (Player) lost
+                    setWinner('right');
+                    playSound('lose');
+                    triggerOpponentChat("lose");
+                    generateBattleRecap('right', 0, towersRef.current[0].hp, towersRef.current[1].hp);
+                } else {
+                    // Right (Enemy) lost
+                    setWinner('left');
+                    playSound('win');
+                    triggerOpponentChat("win");
+                    generateBattleRecap('left', 0, towersRef.current[0].hp, towersRef.current[1].hp);
+                }
             }
             return;
         }
         if(tower.frozenUntil && tower.frozenUntil > performance.now()) return;
         
-        let target = null;
+        // SANTA FIX 4: Apply explicit ANY type to target variable
+        let target: any = null;
+        
         if (tower.targetId) {
             const locked = unitsRef.current.find(u => u.id === tower.targetId);
             if (locked && locked.hp > 0 && Math.abs(locked.x - tower.x) <= tower.range) {
@@ -1324,7 +1397,7 @@ export default function App() {
                     target = u;
                 }
             });
-            if (target) tower.targetId = (target as Unit).id;
+            if (target) tower.targetId = target.id;
         }
 
         if (target && performance.now() - tower.lastAttackTime > tower.attackCooldown) {
@@ -1370,9 +1443,8 @@ export default function App() {
         }
 
       if ((p.isArrow || p.isCannonball) && p.targetId) {
-             // NUCLEAR FIX 3: Use .concat() instead of spread
-             const allTargets = (unitsRef.current as BaseEntity[]).concat(towersRef.current);
-             const target = allTargets.find(t => t.id === p.targetId);
+             // SANTA FIX 5: Nuclear Option - Explicitly cast array AND return type to any to stop TS complaints
+             const target = ([...unitsRef.current, ...towersRef.current] as any[]).find((t: BaseEntity) => t.id === p.targetId);
              
              if (target && target.hp > 0) {
                  p.tx = target.x;
@@ -1424,74 +1496,307 @@ export default function App() {
         }
     });
 
-    // 6. Cleanup
-    unitsRef.current = unitsRef.current.filter(u => u.hp > 0);
-    
-    if (!isTiebreaker) {
-        if (towersRef.current[0].hp <= 0) { setWinner('right'); playSound('lose'); }
-        if (towersRef.current[1].hp <= 0) { setWinner('left'); playSound('win'); }
+    // 6. Shooting Stars Logic (Frequency Increased: every ~7s)
+    if (shootingStarCountRef.current < 20 && Math.random() < 0.003) { // 0.003 chance per frame ~= every few seconds
+        shootingStarsRef.current.push({
+            x: Math.random() * CANVAS_WIDTH,
+            y: Math.random() * 120,
+            vx: -300 - Math.random() * 200,
+            vy: 100 + Math.random() * 100,
+            life: 1.5
+        });
+        shootingStarCountRef.current++;
     }
+    
+    // Update Shooting Stars
+    shootingStarsRef.current.forEach((s, i) => {
+        s.x += s.vx * (dt/1000);
+        s.y += s.vy * (dt/1000);
+        s.life -= dt/1000;
+        if(s.life <= 0) shootingStarsRef.current.splice(i, 1);
+    });
+
+    // 7. Wolf Logic
+    wolfTimerRef.current += dt;
+    if (wolfHowlRef.current && wolfHowlRef.current.active) {
+        wolfHowlRef.current.progress += dt / 2500; // 2.5s duration
+        if (wolfHowlRef.current.progress >= 1) {
+            wolfHowlRef.current = null; // Wolf leaves
+        }
+    } else if (wolfTimerRef.current > 20000) { // Every 20 seconds
+        wolfTimerRef.current = 0;
+        wolfHowlRef.current = {
+            active: true,
+            x: 150, // On left mountain peak (Far Mountain)
+            y: LANE_Y - 105, // Moved down to avoid floating
+            progress: 0
+        };
+        // Removed sound, visual only
+    }
+
+    // 8. Cleanup
+    unitsRef.current = unitsRef.current.filter(u => u.hp > 0);
   };
 
   const draw = (ctx: CanvasRenderingContext2D) => {
-      // BG - NIGHT WAR ZONE
+      // BG - DARK FANTASY (Deep Red/Black)
       const grad = ctx.createLinearGradient(0, 0, 0, LANE_Y);
-      grad.addColorStop(0, '#0c0a09'); 
-      grad.addColorStop(1, '#292524'); 
+      grad.addColorStop(0, '#1a0505'); // Deep Dark Red
+      grad.addColorStop(1, '#451a1a'); // Dark Red Mist
       ctx.fillStyle = grad;
       ctx.fillRect(0,0, CANVAS_WIDTH, LANE_Y);
 
-      // Stars
+      // Stars (Twinkling + Brighter)
       starsRef.current.forEach(star => {
-         ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha * 0.5})`;
-         ctx.beginPath(); ctx.arc(star.x, star.y, Math.random() > 0.9 ? 2 : 1, 0, Math.PI*2); ctx.fill();
+         const opacity = 0.5 + 0.5 * Math.sin(Date.now() * 0.005 + star.x);
+         ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha * opacity})`;
+         ctx.beginPath(); 
+         // Larger radius for "clearer" stars
+         ctx.arc(star.x, star.y, Math.random() > 0.95 ? 2.5 : 1.5, 0, Math.PI*2); 
+         ctx.fill();
       });
+
+      // Shooting Stars
+      shootingStarsRef.current.forEach(s => {
+          ctx.strokeStyle = `rgba(255, 255, 200, ${s.life})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(s.x - s.vx * 0.1, s.y - s.vy * 0.1); // Trail behind
+          ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(s.x, s.y, 2, 0, Math.PI*2); ctx.fill();
+      });
+
+      // MOUNTAINS (Parallax Background)
+      // Far Mountains
+      ctx.fillStyle = '#1c0a0a'; 
+      ctx.beginPath();
+      ctx.moveTo(0, LANE_Y);
+      ctx.lineTo(150, LANE_Y - 120);
+      ctx.lineTo(300, LANE_Y - 40);
+      ctx.lineTo(450, LANE_Y - 100);
+      ctx.lineTo(600, LANE_Y - 50);
+      ctx.lineTo(800, LANE_Y - 140);
+      ctx.lineTo(800, LANE_Y);
+      ctx.fill();
+      
+      // Near Mountains (Darker)
+      ctx.fillStyle = '#110505'; 
+      ctx.beginPath();
+      ctx.moveTo(0, LANE_Y);
+      ctx.lineTo(50, LANE_Y - 50);
+      ctx.lineTo(120, LANE_Y - 20);
+      ctx.lineTo(200, LANE_Y - 80);
+      ctx.lineTo(350, LANE_Y - 30);
+      ctx.lineTo(500, LANE_Y - 100);
+      ctx.lineTo(650, LANE_Y - 40);
+      ctx.lineTo(800, LANE_Y);
+      ctx.fill();
+
+      // WOLF ANIMATION
+      if (wolfHowlRef.current) {
+          const w = wolfHowlRef.current;
+          ctx.save();
+          ctx.translate(w.x, w.y);
+          const scale = 1.0; 
+          ctx.scale(scale, scale);
+          
+          // Wolf Silhouette (Head Tilted)
+          ctx.fillStyle = '#000';
+          ctx.beginPath();
+          // Body
+          ctx.ellipse(0, 5, 10, 15, 0, 0, Math.PI * 2); // Standing on peak
+          // Neck & Head
+          const headAngle = Math.sin(w.progress * Math.PI) * -0.5; // Tilts head up
+          ctx.rotate(headAngle);
+          ctx.rect(-5, -20, 10, 20); // Neck
+          ctx.beginPath();
+          ctx.arc(0, -20, 8, 0, Math.PI * 2); // Head
+          ctx.moveTo(3, -25); ctx.lineTo(15, -30); ctx.lineTo(5, -15); // Snout (Howling)
+          ctx.moveTo(-2, -26); ctx.lineTo(-5, -34); ctx.lineTo(-8, -22); // Ear
+          ctx.fill();
+          
+          // Text Bubble
+          if(w.progress > 0.2 && w.progress < 0.8) {
+              ctx.fillStyle = 'rgba(255,255,255,0.8)';
+              ctx.font = '10px Arial';
+              ctx.fillText("Awooo...", 20, -30);
+          }
+          ctx.restore();
+      }
 
       // Moon
-      ctx.fillStyle = '#fca5a5'; 
-      ctx.shadowBlur = 40; ctx.shadowColor = '#7f1d1d';
-      ctx.beginPath(); ctx.arc(CANVAS_WIDTH - 100, 80, 40, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#f87171'; // Red Moon
+      ctx.shadowBlur = 50; ctx.shadowColor = '#dc2626';
+      ctx.beginPath(); ctx.arc(CANVAS_WIDTH - 100, 80, 45, 0, Math.PI*2); ctx.fill();
       ctx.shadowBlur = 0;
 
-      // UNIFIED GROUND
-      ctx.fillStyle = '#3f3f46'; // Base Ground Color
+      // UNIFIED GROUND (Lighter Wasteland)
+      const groundGrad = ctx.createLinearGradient(0, LANE_Y, 0, CANVAS_HEIGHT);
+      groundGrad.addColorStop(0, '#27272a'); // Charcoal Grey
+      groundGrad.addColorStop(1, '#18181b'); // Dark Grey
+      ctx.fillStyle = groundGrad;
       ctx.fillRect(0, LANE_Y, CANVAS_WIDTH, CANVAS_HEIGHT - LANE_Y);
       
-      // Lane Decoration (Path)
-      ctx.fillStyle = 'rgba(0,0,0,0.2)'; 
-      ctx.fillRect(0, LANE_Y, CANVAS_WIDTH, 40);
-      
-      // Craters
-      cratersRef.current.forEach(c => {
-          ctx.fillStyle = 'rgba(0,0,0,0.3)';
-          ctx.beginPath();
-          ctx.ellipse(c.x, c.y, c.width, c.height, 0, 0, Math.PI*2);
-          ctx.fill();
+      // GROUND TEXTURE (Cobblestone / Cracks)
+      groundDetailRef.current.forEach(d => {
+          ctx.save();
+          ctx.globalAlpha = 0.3; // Subtle
+          ctx.strokeStyle = '#52525b'; // Light Grey Cracks (Visible on darker ground)
+          if (d.type === 'stone') {
+              ctx.beginPath();
+              ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+              ctx.stroke();
+          } else {
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(d.x, d.y);
+              ctx.lineTo(d.x + d.size, d.y + d.size);
+              ctx.lineTo(d.x - d.size, d.y + d.size * 2);
+              ctx.stroke();
+          }
+          ctx.restore();
       });
 
-      // Bridge
-      ctx.strokeStyle = '#52525b';
-      ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.moveTo(CANVAS_WIDTH/2, LANE_Y); ctx.lineTo(CANVAS_WIDTH/2, LANE_Y+40); ctx.stroke();
-      ctx.lineWidth = 1;
+      // RIVER (Starts at Horizon/Ground Level)
+      ctx.fillStyle = '#0c4a6e'; // Dark Blue
+      ctx.fillRect(CANVAS_WIDTH/2 - 20, LANE_Y, 40, CANVAS_HEIGHT - LANE_Y); // Starts at LANE_Y now
+      
+      // Animated Ripples on River
+      const time = Date.now() * 0.002;
+      ctx.strokeStyle = '#38bdf8'; // Light Blue
+      ctx.globalAlpha = 0.3;
+      for(let i=0; i<5; i++) {
+          const y = LANE_Y + (time * 20 + i * 50) % (CANVAS_HEIGHT - LANE_Y);
+          ctx.beginPath();
+          ctx.moveTo(CANVAS_WIDTH/2 - 15, y);
+          ctx.lineTo(CANVAS_WIDTH/2 + 15, y);
+          ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
+
+      // BRIDGE (Stone Bridge over River at Lane Y)
+      ctx.fillStyle = '#404040'; // Dark Stone
+      ctx.fillRect(CANVAS_WIDTH/2 - 25, LANE_Y, 50, 40);
+      // Bridge Details
+      ctx.strokeStyle = '#171717';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(CANVAS_WIDTH/2 - 25, LANE_Y + 10); ctx.lineTo(CANVAS_WIDTH/2 + 25, LANE_Y + 10);
+      ctx.moveTo(CANVAS_WIDTH/2 - 25, LANE_Y + 30); ctx.lineTo(CANVAS_WIDTH/2 + 25, LANE_Y + 30);
+      ctx.stroke();
+
+      // LANE MARKINGS (Dark Fantasy Road)
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; 
+      ctx.fillRect(0, LANE_Y, CANVAS_WIDTH/2 - 25, 40); // Left Road
+      ctx.fillRect(CANVAS_WIDTH/2 + 25, LANE_Y, CANVAS_WIDTH/2 - 25, 40); // Right Road
+      
+      // SCENERY (Sides Only - Rocks & Dead Grass)
+      debrisRef.current.forEach(item => {
+          ctx.save();
+          if (item.type === 'rock') {
+              ctx.fillStyle = '#57534e'; // Stone Grey
+              ctx.beginPath();
+              ctx.arc(item.x, item.y, item.size, 0, Math.PI * 2);
+              ctx.fill();
+          } else {
+              // Dead Grass
+              ctx.strokeStyle = '#44403c'; // Brown/Grey
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.moveTo(item.x, item.y);
+              ctx.lineTo(item.x - 3, item.y - item.size);
+              ctx.moveTo(item.x, item.y);
+              ctx.lineTo(item.x + 3, item.y - item.size);
+              ctx.stroke();
+          }
+          ctx.restore();
+      });
 
       // Towers
       towersRef.current.forEach(t => {
-          if (t.hp <= 0) return;
+          if (t.hp <= 0) {
+              // BURNING EFFECT: Draw Ruin & Spawn Fire
+              // Draw Burnt Tower (Darkened with filter)
+              ctx.save();
+              ctx.filter = 'grayscale(100%) brightness(40%) sepia(20%)';
+              ctx.font = '60px Arial';
+              ctx.textAlign = 'center';
+              ctx.fillStyle = '#fff'; // RESET TO WHITE
+              ctx.fillText(t.team === 'left' ? '🏰' : '🏯', t.x + t.width/2, t.y + 60);
+              ctx.restore();
+              
+              // Spawn particles constantly for dead towers (even during winner screen)
+              if (Math.random() > 0.5) { 
+                  particlesRef.current.push({
+                      x: t.x + t.width/2 + (Math.random() * 40 - 20),
+                      y: t.y + 60 + (Math.random() * 20 - 10),
+                      life: 1.0 + Math.random(), 
+                      color: Math.random() > 0.5 ? '#f97316' : '#ef4444', // Orange/Red
+                      vx: (Math.random() - 0.5) * 2,
+                      vy: -Math.random() * 3 - 1
+                  });
+                  // Add Smoke too
+                  if(Math.random() > 0.5) {
+                      particlesRef.current.push({
+                          x: t.x + t.width/2 + (Math.random() * 40 - 20),
+                          y: t.y + 40,
+                          life: 2.0 + Math.random(),
+                          color: '#d4d4d8', // Light Grey Smoke
+                          vx: (Math.random() - 0.5) * 2,
+                          vy: -Math.random() * 2 - 1
+                      });
+                  }
+              }
+              return;
+          }
+
           if (t.frozenUntil && t.frozenUntil > performance.now()) {
               ctx.shadowBlur = 20;
               ctx.shadowColor = '#06b6d4';
           }
           ctx.font = '60px Arial';
           ctx.textAlign = 'center';
+          ctx.fillStyle = '#fff'; // RESET TO WHITE TO FIX "FADED" LOOK
           ctx.fillText(t.team === 'left' ? '🏰' : '🏯', t.x + t.width/2, t.y + 60);
           ctx.shadowBlur = 0; 
           
-          const pct = Math.max(0, t.hp / t.maxHp);
+          // DAMAGE VISUALS
+          const hpPct = t.hp / t.maxHp;
+          
+          // Smoke when low HP
+          if (hpPct < 0.5 && Math.random() > 0.8) {
+               particlesRef.current.push({
+                  x: t.x + t.width/2 + (Math.random() * 40 - 20),
+                  y: t.y + 40,
+                  life: 1.5 + Math.random(),
+                  color: '#d4d4d8', // Light smoke
+                  vx: (Math.random() - 0.5) * 1,
+                  vy: -Math.random() * 2 - 0.5
+              });
+          }
+
+          // Cracks overlay
+          if (hpPct < 0.75) {
+              ctx.strokeStyle = '#000'; // Black cracks
+              ctx.lineWidth = 3;
+              ctx.beginPath();
+              // Crack 1
+              ctx.moveTo(t.x + 10, t.y + 40); ctx.lineTo(t.x + 20, t.y + 50); ctx.lineTo(t.x + 15, t.y + 60);
+              if (hpPct < 0.4) {
+                  // Heavy cracks
+                  ctx.moveTo(t.x + 35, t.y + 30); ctx.lineTo(t.x + 25, t.y + 45); ctx.lineTo(t.x + 40, t.y + 65);
+                  ctx.moveTo(t.x + t.width/2, t.y + 20); ctx.lineTo(t.x + t.width/2, t.y + 50);
+              }
+              ctx.stroke();
+          }
+
+          // HP Bar
           ctx.fillStyle = '#ef4444';
           ctx.fillRect(t.x, t.y - 10, t.width, 6);
           ctx.fillStyle = '#22c55e';
-          ctx.fillRect(t.x, t.y - 10, t.width * pct, 6);
+          ctx.fillRect(t.x, t.y - 10, t.width * hpPct, 6);
       });
 
       // Units
@@ -1507,7 +1812,7 @@ export default function App() {
           if (u.type === 'archer') icon = '🏹';
           if (u.type === 'skeleton') { ctx.font='20px Arial'; icon = '💀'; }
           if (u.type === 'dragon') icon = '🐲';
-          if (u.type === 'cannon') icon = '💣';
+          if (u.type === 'cannon') icon = '💣'; 
           if (u.type === 'wizard') icon = '🧙‍♂️';
           if (u.type === 'mini_pekka') icon = '🤖';
           if (u.type === 'bats') { ctx.font='20px Arial'; icon = '🦇'; }
@@ -1534,12 +1839,19 @@ export default function App() {
           ctx.arc(0, u.height/2, 20, 0, Math.PI*2);
           ctx.fill();
 
-          ctx.fillText(icon, 0, u.height/2);
+          if (icon === 'cannon_graphic') {
+              // Reverted to simple icon for now as requested
+              ctx.fillStyle = '#fff';
+              ctx.fillText(icon, 0, u.height/2);
+          } else {
+              ctx.fillStyle = '#fff';
+              ctx.fillText(icon, 0, u.height/2);
+          }
           ctx.restore();
 
           if (u.type === 'dragon' && u.state === 'attacking' && u.targetId && (!u.frozenUntil || u.frozenUntil < performance.now())) {
-             // NUCLEAR FIX 4: Use .concat() instead of spread
-             const target = (unitsRef.current as BaseEntity[]).concat(towersRef.current).find(t => t.id === u.targetId);
+             // SANTA FIX 6: Nuclear Option - Explicit cast here as well
+             const target = ([...unitsRef.current, ...towersRef.current] as any[]).find((t: BaseEntity) => t.id === u.targetId);
              if (target) {
                  ctx.save();
                  ctx.strokeStyle = '#f59e0b';
@@ -1585,10 +1897,13 @@ export default function App() {
               ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(5, -3); ctx.lineTo(5, 3); ctx.fill();
               ctx.restore();
           } else if (p.isCannonball) {
-              ctx.fillStyle = '#111827';
+              ctx.fillStyle = '#ea580c'; // Magma Orange
+              ctx.shadowColor = '#c2410c';
+              ctx.shadowBlur = 10;
               ctx.beginPath();
-              ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+              ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
               ctx.fill();
+              ctx.shadowBlur = 0;
           } else {
               ctx.fillStyle = p.color;
               ctx.beginPath();
@@ -1602,12 +1917,10 @@ export default function App() {
           ctx.fillStyle = p.color;
           ctx.fillRect(p.x, p.y, 4, 4);
           
-          // FREEZE PARTICLES ON TIEBREAKER/WIN
-          if (!winner && !isTiebreaker) {
-              p.x += p.vx;
-              p.y += p.vy;
-              p.life -= 0.05;
-          }
+          // ALWAYS ANIMATE PARTICLES (Fire should burn even during victory screen)
+          p.x += p.vx;
+          p.y += p.vy;
+          p.life -= 0.05;
           
           if(p.life <= 0) particlesRef.current.splice(i, 1);
       });
@@ -1621,7 +1934,43 @@ export default function App() {
     
     update(dt);
     if(canvasRef.current) draw(canvasRef.current.getContext('2d')!);
+    
+    // NEW: Draw menu background if in menu
+    if (view === 'menu' && menuCanvasRef.current) {
+        const ctx = menuCanvasRef.current.getContext('2d');
+        if (ctx) drawMenuBackground(ctx);
+    }
+
     requestRef.current = requestAnimationFrame(gameLoop);
+  };
+  
+  // NEW: Menu Background Animation Function
+  const drawMenuBackground = (ctx: CanvasRenderingContext2D) => {
+      // Dark Fantasy Gradient
+      const grad = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+      grad.addColorStop(0, '#0f0505'); 
+      grad.addColorStop(1, '#2a0a0a'); 
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+      // Stars
+      const time = Date.now() * 0.001;
+      starsRef.current.forEach(star => {
+         const opacity = 0.4 + 0.6 * Math.sin(time + star.x);
+         ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha * opacity})`;
+         ctx.beginPath(); 
+         ctx.arc(star.x, star.y, 1.5, 0, Math.PI*2); 
+         ctx.fill();
+      });
+
+      // Floating Icons (Simulated)
+      ctx.save();
+      ctx.globalAlpha = 0.1;
+      ctx.font = '100px Arial';
+      ctx.fillText('⚔️', 100, 150 + Math.sin(time) * 20);
+      ctx.fillText('🏰', ctx.canvas.width - 150, 200 + Math.cos(time) * 20);
+      ctx.fillText('👑', ctx.canvas.width / 2, ctx.canvas.height - 100 + Math.sin(time * 0.5) * 15);
+      ctx.restore();
   };
 
   useEffect(() => {
@@ -1686,35 +2035,45 @@ export default function App() {
 
   if (view === 'menu') {
       return (
-          <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-4 font-sans select-none">
+          <div className="relative min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-4 font-sans select-none overflow-hidden">
               
-              <button onClick={toggleMusic} className="absolute top-4 left-4 p-3 bg-gray-800 rounded-full hover:bg-gray-700 transition">
+              {/* Menu Background Canvas */}
+              <canvas 
+                  ref={menuCanvasRef} 
+                  width={CANVAS_WIDTH} 
+                  height={CANVAS_HEIGHT} 
+                  className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none"
+              />
+
+              <button onClick={toggleMusic} className="absolute top-4 left-4 z-20 p-3 bg-gray-800/80 border border-gray-700 rounded-full hover:bg-gray-700 transition">
                   {isMusicOn ? '🎵' : '🔇'}
               </button>
 
-              <h1 className="text-6xl font-black bg-gradient-to-br from-yellow-400 to-red-600 bg-clip-text text-transparent mb-2">
-                  CLASH BATTLE
-              </h1>
-              <p className="font-bold italic text-sm mb-8 transform -skew-x-6 bg-gradient-to-br from-yellow-400 to-red-600 bg-clip-text text-transparent opacity-80">
-                  inspired by clash royale before it became pay 2 win
-              </p>
+              <div className="relative z-10 flex flex-col items-center text-center">
+                  <h1 className="text-center text-7xl md:text-9xl font-black bg-gradient-to-b from-red-500 to-red-900 bg-clip-text text-transparent mb-4 drop-shadow-[0_5px_5px_rgba(220,38,38,0.5)] tracking-tighter">
+                      CLASH BATTLE
+                  </h1>
+                  <p className="text-center font-bold italic text-xs md:text-sm mb-12 transform -skew-x-6 text-red-400 opacity-80 tracking-widest border-b-2 border-red-900/50 pb-2 uppercase">
+                      inspired by clash royale before it became pay 2 win
+                  </p>
 
-              <div className="space-y-4 w-full max-w-xs">
-                  {['easy', 'medium', 'hard'].map(d => (
+                  <div className="space-y-4 w-full max-w-xs">
+                      {['easy', 'medium', 'hard'].map(d => (
+                          <button 
+                            key={d}
+                            onClick={() => { setDifficulty(d as Difficulty); initGame(); setView('game'); }}
+                            className="w-full py-4 bg-gray-900/80 border-2 border-gray-600 hover:border-red-600 hover:bg-red-900/20 rounded-sm font-bold text-xl uppercase tracking-[0.2em] transition-all hover:scale-105 shadow-xl backdrop-blur-sm group"
+                          >
+                              <span className="group-hover:text-red-500 transition-colors">{d} Mode</span>
+                          </button>
+                      ))}
                       <button 
-                        key={d}
-                        onClick={() => { setDifficulty(d as Difficulty); initGame(); setView('game'); }}
-                        className="w-full py-4 bg-gray-800 border-2 border-gray-700 hover:border-yellow-500 rounded-xl font-bold text-xl uppercase tracking-widest transition-all hover:scale-105"
+                        onClick={() => setView('credits')}
+                        className="w-full py-3 text-gray-500 hover:text-white transition mt-4 text-xs uppercase tracking-widest hover:underline"
                       >
-                          {d} Mode
+                          Credits / Guide
                       </button>
-                  ))}
-                  <button 
-                    onClick={() => setView('credits')}
-                    className="w-full py-3 text-gray-400 hover:text-white transition"
-                  >
-                      Credits / How to Play
-                  </button>
+                  </div>
               </div>
           </div>
       );
@@ -1722,74 +2081,78 @@ export default function App() {
 
   if (view === 'credits') {
       return (
-          <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center text-white p-4 py-10">
-              <button onClick={toggleMusic} className="absolute top-4 left-4 p-3 bg-gray-800 rounded-full hover:bg-gray-700 transition">
+          <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center text-white p-4 py-10 relative overflow-hidden">
+             
+              {/* Background Effect */}
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-gray-900 to-black pointer-events-none"></div>
+
+              <button onClick={toggleMusic} className="absolute top-4 left-4 p-3 bg-gray-800 rounded-full hover:bg-gray-700 transition z-20">
                   {isMusicOn ? '🎵' : '🔇'}
               </button>
-              <div className="w-full max-w-2xl bg-gray-800 p-8 rounded-2xl border border-gray-700 overflow-y-auto max-h-[85vh]">
-                  <h2 className="text-3xl font-bold mb-4 text-yellow-500 sticky top-0 bg-gray-800 pb-2">How to Play</h2>
-                  <ul className="list-disc pl-5 space-y-2 text-gray-300 mb-8 text-sm md:text-base">
-                      <li>Drag cards from the bottom onto the LEFT side of the field.</li>
-                      <li>Destroy the enemy tower to win!</li>
-                      <li>Elixir regenerates over time. Spend wisely.</li>
-                      <li><strong>Counters:</strong> Skeletons beat Giants, Archers beat Skeletons, Fireball clears swarms.</li>
+              <div className="relative z-10 w-full max-w-2xl bg-gray-900/90 p-8 rounded-2xl border border-gray-700/50 overflow-y-auto max-h-[85vh] shadow-2xl backdrop-blur-md">
+                  <h2 className="text-3xl font-black mb-4 text-red-500 sticky top-0 bg-gray-900/95 pb-2 uppercase tracking-widest border-b border-red-900/30">How to Play</h2>
+                  <ul className="list-disc pl-5 space-y-3 text-white mb-8 text-sm md:text-base font-bold font-serif">
+                      <li>Drag cards from the bottom onto the <span className="text-blue-400 font-extrabold">LEFT</span> side of the field.</li>
+                      <li>Destroy the enemy <span className="text-red-500 font-extrabold">TOWER</span> to claim victory.</li>
+                      <li>Elixir regenerates over time. Spend wisely, general.</li>
+                      <li><strong>Counters:</strong> Skeletons overwhelm Giants. Arrows pierce the sky. Fire cleanses all.</li>
                   </ul>
 
-                  <div className="bg-gray-700/30 p-4 rounded-xl border border-yellow-500/30 mb-8 flex flex-col items-center text-center">
-                        <div className="text-yellow-400 font-bold mb-2">✨ Ask the War General (AI)</div>
-                        <p className="text-sm text-gray-400 mb-4">Get specific tips and lore for your cards!</p>
+                  <div className="bg-black/30 p-6 rounded-sm border-l-4 border-yellow-600 mb-8 flex flex-col items-center text-center">
+                        <div className="text-yellow-500 font-bold mb-2 uppercase tracking-wide text-xs">✨ Oracle of War (AI)</div>
+                        <p className="text-sm text-gray-300 mb-4 font-serif italic font-bold">Consult the ancient texts for strategy...</p>
                         
                         {strategyTip ? (
-                            <div className="animate-in fade-in space-y-3 w-full">
-                                <div className="bg-gray-800/80 p-3 rounded-lg border-l-4 border-green-500 text-left">
-                                    <span className="text-green-400 font-bold text-xs uppercase block mb-1">Strategy: {strategyTip.cardName}</span>
-                                    <p className="text-sm font-mono text-gray-200">"{strategyTip.tip}"</p>
+                            <div className="animate-in fade-in space-y-4 w-full">
+                                <div className="text-left">
+                                    <span className="text-green-500 font-bold text-[10px] uppercase block mb-1 tracking-widest">Strategy: {strategyTip.cardName}</span>
+                                    <p className="text-sm font-bold font-mono text-white leading-relaxed border-l-2 border-green-900/50 pl-3">"{strategyTip.tip}"</p>
                                 </div>
-                                <div className="bg-gray-800/80 p-3 rounded-lg border-l-4 border-purple-500 text-left">
-                                    <span className="text-purple-400 font-bold text-xs uppercase block mb-1">Lore</span>
-                                    <p className="text-sm font-serif italic text-gray-300">"{strategyTip.lore}"</p>
+                                <div className="text-left">
+                                    <span className="text-purple-500 font-bold text-[10px] uppercase block mb-1 tracking-widest">Lore</span>
+                                    <p className="text-sm font-bold font-serif italic text-gray-300 leading-relaxed border-l-2 border-purple-900/50 pl-3">"{strategyTip.lore}"</p>
                                 </div>
                                 <button 
                                     onClick={getStrategyTip}
                                     disabled={isGeneratingTip}
-                                    className="mt-2 text-xs text-yellow-500 underline hover:text-yellow-400 disabled:opacity-50"
+                                    className="mt-4 text-xs text-yellow-600 hover:text-yellow-400 disabled:opacity-50 w-full text-right font-bold"
                                 >
-                                    {isGeneratingTip ? "Consulting..." : "Next Tip ➡"}
+                                    {isGeneratingTip ? "Consulting..." : "Seek Another Prophecy ➡"}
                                 </button>
                             </div>
                         ) : (
                             <button 
                                 onClick={getStrategyTip}
                                 disabled={isGeneratingTip}
-                                className="px-6 py-2 bg-yellow-600 hover:bg-yellow-500 rounded-full text-sm font-bold transition disabled:opacity-50 shadow-lg"
+                                className="px-8 py-3 bg-yellow-700/20 border border-yellow-700/50 hover:bg-yellow-700/40 hover:border-yellow-500 text-yellow-500 font-bold text-xs uppercase tracking-widest transition disabled:opacity-50"
                             >
-                                {isGeneratingTip ? "Consulting..." : "Get Strategy Tip"}
+                                {isGeneratingTip ? "Consulting..." : "Consult the Oracle"}
                             </button>
                         )}
                   </div>
 
-                  <h3 className="text-2xl font-bold mb-4 text-blue-400 sticky top-12 bg-gray-800 pb-2 border-b border-gray-700">Troop Guide</h3>
+                  <h3 className="text-xl font-bold mb-4 text-white sticky top-12 bg-gray-900/95 pb-2 border-b border-gray-800 uppercase tracking-widest">Troop Dossier</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                       {Object.values(CARDS).map(card => (
-                          <div key={card.id} className="flex items-center gap-3 bg-gray-700/50 p-3 rounded-lg border border-gray-600">
-                              <div className="text-4xl">{card.icon}</div>
+                          <div key={card.id} className="flex items-center gap-3 bg-black/40 p-3 rounded border border-gray-800 hover:border-gray-600 transition group">
+                              <div className="text-3xl group-hover:scale-110 transition-transform duration-300">{card.icon}</div>
                               <div>
-                                  <div className="font-bold text-yellow-500 flex justify-between w-full">
+                                  <div className="font-bold text-white flex justify-between w-full text-sm uppercase tracking-wide">
                                       <span>{card.name}</span>
-                                      <span className="text-purple-400 text-sm">💧 {card.cost}</span>
+                                      <span className="text-blue-400 text-xs">💧 {card.cost}</span>
                                   </div>
-                                  <div className="text-xs text-gray-300 leading-tight">{card.description}</div>
+                                  <div className="text-[10px] text-gray-400 font-bold leading-tight mt-1 font-serif">{card.description}</div>
                               </div>
                           </div>
                       ))}
                   </div>
 
-                  <div className="border-t border-gray-700 pt-6 text-center">
-                      <p className="text-gray-400 text-sm uppercase tracking-widest mb-2">Created By</p>
-                      <p className="text-2xl font-bold">Nhat Nam Do</p>
-                      <p className="text-blue-400">namdok2k3@gmail.com</p>
+                  <div className="border-t border-gray-800 pt-6 text-center">
+                      <p className="text-gray-500 text-[10px] uppercase tracking-[0.3em] mb-2 font-bold">Architect</p>
+                      <p className="text-2xl font-black text-white tracking-wider">Nhat Nam Do</p>
+                      <p className="text-red-500 text-sm mt-1 font-mono font-bold tracking-wide">namdok2k3@gmail.com</p>
                   </div>
-                  <button onClick={() => setView('menu')} className="mt-8 w-full py-3 bg-gray-700 rounded-lg font-bold hover:bg-gray-600 transition">Back to Menu</button>
+                  <button onClick={() => setView('menu')} className="mt-8 w-full py-4 bg-gray-800 rounded font-bold hover:bg-gray-700 transition uppercase tracking-widest text-xs border border-gray-700 text-white">Return to Menu</button>
               </div>
           </div>
       );
@@ -1813,7 +2176,10 @@ export default function App() {
                 {Math.floor(timeRemaining / 60)}:{(Math.floor(timeRemaining) % 60).toString().padStart(2, '0')}
             </div>
             {isTiebreaker ? (
-                <div className="text-xs font-bold text-red-500 animate-bounce">TIEBREAKER!</div>
+                <div className="text-xs font-bold text-red-500 animate-bounce flex gap-2">
+                    <span>TIEBREAKER!</span>
+                    <span className="text-orange-500">(HP DRAINING)</span>
+                </div>
             ) : doubleElixir && (
                 <div className="text-xs font-bold text-purple-400 animate-bounce">2x ELIXIR</div>
             )}
@@ -1875,7 +2241,7 @@ export default function App() {
           )}
 
           {/* Invalid Drop Zone Indicator (Right Side) */}
-          {draggingCard && draggingCard !== 'fireball' && draggingCard !== 'log' && draggingCard !== 'freeze' && (
+          {draggingCard && draggingCard !== 'fireball' && draggingCard !== 'freeze' && (
               <div className="absolute top-0 right-0 w-1/2 h-full bg-red-500/10 border-l-2 border-red-500/50 flex items-center justify-center pointer-events-none">
                   <span className="text-red-500 font-bold bg-black/50 px-2 rounded">No Deploy Zone</span>
               </div>
@@ -1948,7 +2314,8 @@ export default function App() {
                           <div className="text-4xl md:text-5xl drop-shadow-lg">{stats.icon}</div>
                           <div className={`
                              w-full text-center font-black text-sm md:text-base border-t border-gray-700 pt-1
-                             ${canAfford ? 'text-purple-400' : 'text-red-500'}\n                          `}>
+                             ${canAfford ? 'text-purple-400' : 'text-red-500'}
+                          `}>
                               {stats.cost}
                           </div>
 
