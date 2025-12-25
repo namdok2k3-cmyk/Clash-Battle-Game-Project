@@ -1135,8 +1135,7 @@ export default function App() {
       unit.x = Math.max(0, Math.min(CANVAS_WIDTH, unit.x));
 
       let target: BaseEntity | null = null;
-      const allEnemies = [...unitsRef.current.filter(u => u.team !== unit.team), ...towersRef.current.filter(t => t.team !== unit.team)];
-
+const allEnemies = [...unitsRef.current.filter(u => u.team !== unit.team), ...towersRef.current.filter(t => t.team !== unit.team)] as BaseEntity[];
       // Giant Retargeting Logic
       if (unit.type === 'giant') {
           let closestBuilding: BaseEntity | null = null;
@@ -1366,8 +1365,11 @@ export default function App() {
             return;
         }
 
-        if ((p.isArrow || p.isCannonball) && p.targetId) {
-             const target = [...unitsRef.current, ...towersRef.current].find(t => t.id === p.targetId);
+      if ((p.isArrow || p.isCannonball) && p.targetId) {
+             // FIX: Explicitly cast the combined array to BaseEntity[]
+             const allTargets = [...unitsRef.current, ...towersRef.current] as BaseEntity[];
+             const target = allTargets.find(t => t.id === p.targetId);
+             
              if (target && target.hp > 0) {
                  p.tx = target.x;
                  p.ty = target.y + target.height/2;
